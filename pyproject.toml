@@ -1,0 +1,17 @@
+[project]
+name = "entity-manager"
+version = "0.1.0"
+description = "An entity manager for LLMs."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "cyclopts>=4.3.0",
+]
+
+[project.scripts]
+entity-manager = "entity_manager.cli:app"
+em = "entity_manager.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
