@@ -70,7 +70,7 @@ def create(
         labels=labels_dict,
         assignee=assignee,
     )
-    print(f"Created entity #{entity.id}: {entity.title}")
+    print(f"Created entity {entity.id}: {entity.title}")
 
 
 @app.command
@@ -79,7 +79,7 @@ def read(entity_id: str) -> None:
     backend = get_backend()
     entity = backend.read(entity_id)
 
-    print(f"Entity #{entity.id}")
+    print(f"Entity: {entity.id}")
     print(f"Title: {entity.title}")
     print(f"Description: {entity.description}")
     print(f"Status: {entity.status}")
@@ -123,7 +123,7 @@ def update(
         status=status,
         assignee=assignee,
     )
-    print(f"Updated entity #{entity.id}: {entity.title}")
+    print(f"Updated entity {entity.id}: {entity.title}")
 
 
 @app.command
@@ -159,7 +159,7 @@ def list(
         labels_str = ""
         if entity.labels:
             labels_str = " [" + ", ".join([f"{k}:{v}" if v else k for k, v in entity.labels.items()]) + "]"
-        print(f"{status_marker} #{entity.id}: {entity.title}{labels_str}")
+        print(f"{status_marker} {entity.id}: {entity.title}{labels_str}")
 
 
 @link_app.command
@@ -171,7 +171,7 @@ def add(
     """Add links from source entity to target entities."""
     backend = get_backend()
     backend.add_link(source_id, list(target_ids), type)
-    print(f"Added {len(target_ids)} link(s) from #{source_id}")
+    print(f"Added {len(target_ids)} link(s) from {source_id}")
 
 
 @link_app.command
@@ -184,7 +184,7 @@ def remove(
     """Remove links from source entity to target entities."""
     backend = get_backend()
     backend.remove_link(source_id, list(target_ids), type, recursive)
-    print(f"Removed {len(target_ids)} link(s) from #{source_id}")
+    print(f"Removed {len(target_ids)} link(s) from {source_id}")
 
 
 @link_app.command(name="list")
@@ -197,12 +197,12 @@ def list_links(
     links = backend.list_links(entity_id, type)
 
     if not links:
-        print(f"No links found for entity #{entity_id}")
+        print(f"No links found for entity {entity_id}")
         return
 
-    print(f"Links for entity #{entity_id}:\n")
+    print(f"Links for entity {entity_id}:\n")
     for link in links:
-        print(f"  #{link.source_id} --[{link.link_type}]--> #{link.target_id}")
+        print(f"  {link.source_id} --[{link.link_type}]--> {link.target_id}")
 
 
 @link_app.command
@@ -213,7 +213,7 @@ def tree(entity_id: str) -> None:
 
     # Print entity
     entity = tree["entity"]
-    print(f"Entity: #{entity['id']} {entity['title']} ({entity['state']})\n")
+    print(f"Entity: {entity['id']} {entity['title']} ({entity['state']})\n")
 
     # Print links dynamically
     links = tree["links"]
@@ -227,7 +227,7 @@ def tree(entity_id: str) -> None:
 
         print(f"{display_name}:")
         for item in link_data:
-            print(f"  - #{item['id']} {item['title']}")
+            print(f"  - {item['id']} {item['title']}")
         print()
 
 
@@ -243,8 +243,8 @@ def cycle() -> None:
 
     print(f"Found {len(cycles)} cycle(s):\n")
     for i, cycle in enumerate(cycles, 1):
-        cycle_str = " -> ".join([f"#{eid}" for eid in cycle])
-        print(f"{i}. {cycle_str} -> #{cycle[0]}")
+        cycle_str = " -> ".join([f"{eid}" for eid in cycle])
+        print(f"{i}. {cycle_str} -> {cycle[0]}")
 
 
 @config_app.command
