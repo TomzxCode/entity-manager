@@ -1,11 +1,12 @@
-"""GitHub GraphQL backend implementation."""
+"""GitHub REST API backend implementation using PyGithub."""
 
 import os
 from typing import Any
 
 import structlog
-from gql import Client, gql
-from gql.transport.aiohttp import AIOHTTPTransport
+from github import Auth, Github
+from github.Issue import Issue
+from github.Repository import Repository
 
 from entity_manager.backend import Backend
 from entity_manager.models import Entity, Link
@@ -31,11 +32,9 @@ class GitHubBackend(Backend):
             raise ValueError("GitHub token required (set GITHUB_TOKEN env var or pass token)")
 
         logger.debug("Initializing GitHub backend", owner=owner, repo=repo)
-        transport = AIOHTTPTransport(
-            url="https://api.github.com/graphql",
-            headers={"Authorization": f"bearer {self.token}"},
-        )
-        self.client = Client(transport=transport)
+        auth = Auth.Token(self.token)
+        self.client = Github(auth=auth)
+        self.repository: Repository = self.client.get_repo(f"{owner}/{repo}")
         self._config: dict[str, str] = {}
         logger.info("GitHub backend initialized", owner=owner, repo=repo)
 
@@ -55,33 +54,39 @@ class GitHubBackend(Backend):
         """Format labels dict into GitHub label names."""
         return [f"{k}:{v}" if v else k for k, v in labels.items()]
 
-    def _issue_to_entity(self, issue: dict[str, Any]) -> Entity:
+    def _ensure_labels_exist(self, label_names: list[str]) -> None:
+        """Ensure all labels exist in the repository, creating them if needed."""
+        existing_labels = {label.name for label in self.repository.get_labels()}
+        for label_name in label_names:
+            if label_name not in existing_labels:
+                logger.debug("Creating label", label_name=label_name)
+                self.repository.create_label(name=label_name, color="ededed")
+
+    def _issue_to_entity(self, issue: Issue) -> Entity:
         """Convert GitHub issue to Entity."""
-        logger.debug("Converting GitHub issue to entity", issue_number=issue["number"])
+        logger.debug("Converting GitHub issue to entity", issue_number=issue.number)
         labels = {}
-        for label in issue.get("labels", {}).get("nodes", []):
-            name = label["name"]
+        for label in issue.labels:
+            name = label.name
             if ":" in name:
                 key, value = name.split(":", 1)
                 labels[key] = value
             else:
                 labels[name] = ""
 
-        assignee = None
-        if issue.get("assignees", {}).get("nodes"):
-            assignee = issue["assignees"]["nodes"][0]["login"]
+        assignee = issue.assignee.login if issue.assignee else None
 
         entity = Entity(
-            id=str(issue["number"]),
-            title=issue["title"],
-            description=issue.get("body", "") or "",
+            id=str(issue.number),
+            title=issue.title,
+            description=issue.body or "",
             labels=labels,
             assignee=assignee,
-            status=issue["state"].lower(),
+            status=issue.state.lower(),
             metadata={
-                "url": issue["url"],
-                "created_at": issue["createdAt"],
-                "updated_at": issue["updatedAt"],
+                "url": issue.html_url,
+                "created_at": issue.created_at.isoformat(),
+                "updated_at": issue.updated_at.isoformat(),
             },
         )
         logger.debug("Converted issue to entity", entity_id=entity.id, title=entity.title)
@@ -96,179 +101,31 @@ class GitHubBackend(Backend):
     ) -> Entity:
         """Create a new GitHub issue."""
         logger.info("Creating GitHub issue", title=title, assignee=assignee)
-        mutation = gql(
-            """
-            mutation CreateIssue(
-                $repositoryId: ID!
-                $title: String!
-                $body: String
-                $labelIds: [ID!]
-                $assigneeIds: [ID!]
-            ) {
-                createIssue(input: {
-                    repositoryId: $repositoryId
-                    title: $title
-                    body: $body
-                    labelIds: $labelIds
-                    assigneeIds: $assigneeIds
-                }) {
-                    issue {
-                        number
-                        title
-                        body
-                        state
-                        url
-                        createdAt
-                        updatedAt
-                        labels(first: 100) {
-                            nodes {
-                                name
-                            }
-                        }
-                        assignees(first: 1) {
-                            nodes {
-                                login
-                            }
-                        }
-                    }
-                }
-            }
-        """
-        )
 
-        repo_query = gql(
-            """
-            query GetRepo($owner: String!, $name: String!) {
-                repository(owner: $owner, name: $name) {
-                    id
-                }
-            }
-        """
-        )
-
-        logger.debug("Fetching repository ID")
-        result = self.client.execute(repo_query, variable_values={"owner": self.owner, "name": self.repo})
-        repo_id = result["repository"]["id"]
-        logger.debug("Repository ID fetched", repo_id=repo_id)
-
-        label_ids = []
-        assignee_ids = []
-
+        label_names = []
         if labels:
             logger.debug("Processing labels for create", labels=labels)
-            # Get all existing label IDs from the repository
-            repo_labels_query = gql(
-                """
-                query GetRepoLabels($owner: String!, $name: String!) {
-                    repository(owner: $owner, name: $name) {
-                        labels(first: 100) {
-                            nodes {
-                                id
-                                name
-                            }
-                        }
-                    }
-                }
-            """
-            )
+            label_names = self._format_labels(labels)
+            self._ensure_labels_exist(label_names)
 
-            repo_labels_result = self.client.execute(
-                repo_labels_query, variable_values={"owner": self.owner, "name": self.repo}
-            )
+        assignees = [assignee] if assignee else []
 
-            # Create a map of label names to IDs
-            label_name_to_id = {
-                label["name"]: label["id"] for label in repo_labels_result["repository"]["labels"]["nodes"]
-            }
+        issue = self.repository.create_issue(
+            title=title,
+            body=description,
+            labels=label_names,
+            assignees=assignees,
+        )
 
-            # Format the labels we want to set
-            desired_label_names = self._format_labels(labels)
-
-            # Find which labels need to be created
-            labels_to_create = [name for name in desired_label_names if name not in label_name_to_id]
-
-            # Create missing labels
-            for label_name in labels_to_create:
-                create_label_mutation = gql(
-                    """
-                    mutation CreateLabel($repositoryId: ID!, $name: String!, $color: String!) {
-                        createLabel(input: {
-                            repositoryId: $repositoryId
-                            name: $name
-                            color: $color
-                        }) {
-                            label {
-                                id
-                                name
-                            }
-                        }
-                    }
-                """
-                )
-
-                create_result = self.client.execute(
-                    create_label_mutation,
-                    variable_values={
-                        "repositoryId": repo_id,
-                        "name": label_name,
-                        "color": "ededed",  # Default gray color
-                    },
-                )
-                label_name_to_id[label_name] = create_result["createLabel"]["label"]["id"]
-
-            # Get the label IDs we want to set
-            label_ids = [label_name_to_id[name] for name in desired_label_names if name in label_name_to_id]
-
-        params: dict[str, Any] = {
-            "repositoryId": repo_id,
-            "title": title,
-            "body": description,
-            "labelIds": label_ids,
-            "assigneeIds": assignee_ids,
-        }
-
-        logger.debug("Executing create issue mutation")
-        result = self.client.execute(mutation, variable_values=params)
-        entity = self._issue_to_entity(result["createIssue"]["issue"])
+        entity = self._issue_to_entity(issue)
         logger.info("GitHub issue created", entity_id=entity.id)
         return entity
 
     def read(self, entity_id: str) -> Entity:
         """Read a GitHub issue by number."""
         logger.info("Reading GitHub issue", entity_id=entity_id)
-        query = gql(
-            """
-            query GetIssue($owner: String!, $name: String!, $number: Int!) {
-                repository(owner: $owner, name: $name) {
-                    issue(number: $number) {
-                        number
-                        title
-                        body
-                        state
-                        url
-                        createdAt
-                        updatedAt
-                        labels(first: 100) {
-                            nodes {
-                                name
-                            }
-                        }
-                        assignees(first: 1) {
-                            nodes {
-                                login
-                            }
-                        }
-                    }
-                }
-            }
-        """
-        )
-
-        logger.debug("Executing read issue query", entity_id=entity_id)
-        result = self.client.execute(
-            query, variable_values={"owner": self.owner, "name": self.repo, "number": int(entity_id)}
-        )
-        entity = self._issue_to_entity(result["repository"]["issue"])
+        issue = self.repository.get_issue(number=int(entity_id))
+        entity = self._issue_to_entity(issue)
         logger.debug("GitHub issue read successfully", entity_id=entity_id)
         return entity
 
@@ -283,182 +140,43 @@ class GitHubBackend(Backend):
     ) -> Entity:
         """Update a GitHub issue."""
         logger.info("Updating GitHub issue", entity_id=entity_id, title=title, status=status, assignee=assignee)
-        query = gql(
-            """
-            query GetIssueId($owner: String!, $name: String!, $number: Int!) {
-                repository(owner: $owner, name: $name) {
-                    issue(number: $number) {
-                        id
-                    }
-                }
-            }
-        """
-        )
+        issue = self.repository.get_issue(number=int(entity_id))
 
-        logger.debug("Fetching issue ID for update", entity_id=entity_id)
-        result = self.client.execute(
-            query, variable_values={"owner": self.owner, "name": self.repo, "number": int(entity_id)}
-        )
-        issue_id = result["repository"]["issue"]["id"]
-        logger.debug("Issue ID fetched", entity_id=entity_id, issue_id=issue_id)
+        # Update title and description
+        if title is not None or description is not None:
+            issue.edit(
+                title=title if title is not None else issue.title,
+                body=description if description is not None else issue.body,
+            )
 
-        mutation = gql(
-            """
-            mutation UpdateIssue($issueId: ID!, $title: String, $body: String) {
-                updateIssue(input: {
-                    id: $issueId
-                    title: $title
-                    body: $body
-                }) {
-                    issue {
-                        number
-                        title
-                        body
-                        state
-                        url
-                        createdAt
-                        updatedAt
-                        labels(first: 100) {
-                            nodes {
-                                name
-                            }
-                        }
-                        assignees(first: 1) {
-                            nodes {
-                                login
-                            }
-                        }
-                    }
-                }
-            }
-        """
-        )
-
-        params: dict[str, Any] = {"issueId": issue_id}
-        if title:
-            params["title"] = title
-        if description is not None:
-            params["body"] = description
-
-        logger.debug("Executing update issue mutation", entity_id=entity_id)
-        result = self.client.execute(mutation, variable_values=params)
-
+        # Update status
         if status:
             logger.debug("Updating issue status", entity_id=entity_id, status=status)
-            state_mutation = gql(
-                """
-                mutation UpdateIssueState($issueId: ID!, $state: IssueState!) {
-                    updateIssue(input: {
-                        id: $issueId
-                        state: $state
-                    }) {
-                        issue {
-                            number
-                        }
-                    }
-                }
-            """
-            )
-            state_value = "OPEN" if status == "open" else "CLOSED"
-            self.client.execute(state_mutation, variable_values={"issueId": issue_id, "state": state_value})
+            if status == "open":
+                issue.edit(state="open")
+            elif status == "closed":
+                issue.edit(state="closed")
 
+        # Update labels
         if labels is not None:
             logger.debug("Updating issue labels", entity_id=entity_id, labels=labels)
-            # First, get all existing label IDs from the repository
-            repo_labels_query = gql(
-                """
-                query GetRepoLabels($owner: String!, $name: String!) {
-                    repository(owner: $owner, name: $name) {
-                        labels(first: 100) {
-                            nodes {
-                                id
-                                name
-                            }
-                        }
-                    }
-                }
-            """
-            )
+            label_names = self._format_labels(labels)
+            self._ensure_labels_exist(label_names)
+            issue.set_labels(*label_names)
 
-            repo_labels_result = self.client.execute(
-                repo_labels_query, variable_values={"owner": self.owner, "name": self.repo}
-            )
+        # Update assignee
+        if assignee is not None:
+            logger.debug("Updating issue assignee", entity_id=entity_id, assignee=assignee)
+            if assignee:
+                issue.add_to_assignees(assignee)
+            else:
+                # Clear assignees
+                for current_assignee in issue.assignees:
+                    issue.remove_from_assignees(current_assignee)
 
-            # Create a map of label names to IDs
-            label_name_to_id = {
-                label["name"]: label["id"] for label in repo_labels_result["repository"]["labels"]["nodes"]
-            }
-
-            # Format the labels we want to set
-            desired_label_names = self._format_labels(labels)
-
-            # Find which labels need to be created
-            labels_to_create = [name for name in desired_label_names if name not in label_name_to_id]
-
-            # Create missing labels
-            for label_name in labels_to_create:
-                create_label_mutation = gql(
-                    """
-                    mutation CreateLabel($repositoryId: ID!, $name: String!, $color: String!) {
-                        createLabel(input: {
-                            repositoryId: $repositoryId
-                            name: $name
-                            color: $color
-                        }) {
-                            label {
-                                id
-                                name
-                            }
-                        }
-                    }
-                """
-                )
-
-                # Get repository ID
-                repo_query = gql(
-                    """
-                    query GetRepo($owner: String!, $name: String!) {
-                        repository(owner: $owner, name: $name) {
-                            id
-                        }
-                    }
-                """
-                )
-                repo_result = self.client.execute(repo_query, variable_values={"owner": self.owner, "name": self.repo})
-                repo_id = repo_result["repository"]["id"]
-
-                create_result = self.client.execute(
-                    create_label_mutation,
-                    variable_values={
-                        "repositoryId": repo_id,
-                        "name": label_name,
-                        "color": "ededed",  # Default gray color
-                    },
-                )
-                label_name_to_id[label_name] = create_result["createLabel"]["label"]["id"]
-
-            # Get the label IDs we want to set
-            label_ids = [label_name_to_id[name] for name in desired_label_names if name in label_name_to_id]
-
-            # Use updateIssue mutation with labelIds to replace all labels
-            update_labels_mutation = gql(
-                """
-                mutation UpdateIssueLabels($issueId: ID!, $labelIds: [ID!]) {
-                    updateIssue(input: {
-                        id: $issueId
-                        labelIds: $labelIds
-                    }) {
-                        issue {
-                            number
-                        }
-                    }
-                }
-            """
-            )
-
-            self.client.execute(update_labels_mutation, variable_values={"issueId": issue_id, "labelIds": label_ids})
-
-        entity = self._issue_to_entity(result["updateIssue"]["issue"])
+        # Refresh issue to get updated data
+        issue = self.repository.get_issue(number=int(entity_id))
+        entity = self._issue_to_entity(issue)
         logger.info("GitHub issue updated successfully", entity_id=entity_id)
         return entity
 
@@ -477,59 +195,28 @@ class GitHubBackend(Backend):
     ) -> list[Entity]:
         """List GitHub issues."""
         logger.info("Listing GitHub issues", filters=filters, sort_by=sort_by, limit=limit)
-        query = gql(
-            """
-            query ListIssues($owner: String!, $name: String!, $first: Int, $states: [IssueState!]) {
-                repository(owner: $owner, name: $name) {
-                    issues(first: $first, states: $states, orderBy: {field: CREATED_AT, direction: DESC}) {
-                        nodes {
-                            number
-                            title
-                            body
-                            state
-                            url
-                            createdAt
-                            updatedAt
-                            labels(first: 100) {
-                                nodes {
-                                    name
-                                }
-                            }
-                            assignees(first: 1) {
-                                nodes {
-                                    login
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        """
-        )
 
-        states = None
+        state = "all"
         if filters and "status" in filters:
-            status = filters["status"]
-            if status == "open":
-                states = ["OPEN"]
-            elif status == "closed":
-                states = ["CLOSED"]
+            status_filter = filters["status"]
+            if status_filter == "open":
+                state = "open"
+            elif status_filter == "closed":
+                state = "closed"
 
-        params: dict[str, Any] = {
-            "owner": self.owner,
-            "name": self.repo,
-            "first": limit or 100,
-            "states": states,
-        }
+        issues = self.repository.get_issues(state=state, sort="created", direction="desc")
 
-        logger.debug("Executing list issues query", params=params)
-        result = self.client.execute(query, variable_values=params)
-        entities = [self._issue_to_entity(issue) for issue in result["repository"]["issues"]["nodes"]]
+        entities = []
+        for issue in issues:
+            entities.append(self._issue_to_entity(issue))
+            if limit and len(entities) >= limit:
+                break
+
         logger.info("Listed GitHub issues", count=len(entities))
         return entities
 
     def add_link(self, source_id: str, target_ids: list[str], link_type: str) -> None:
-        """Add links using GitHub's native issue relationships.
+        """Add links using GitHub's REST API for issue relationships.
 
         Supported link types:
         - 'blocked by': Marks source_id as blocked by target_ids
@@ -551,107 +238,41 @@ class GitHubBackend(Backend):
                 f"Unsupported link type: '{link_type}'. GitHub backend supports: 'blocked by', 'blocking', 'parent'"
             )
 
-        # Get issue IDs for source and all targets
-        query = gql(
-            """
-            query GetIssueId($owner: String!, $name: String!, $number: Int!) {
-                repository(owner: $owner, name: $name) {
-                    issue(number: $number) {
-                        id
-                    }
-                }
-            }
-        """
-        )
+        # Get the underlying requester for direct API access
+        requester = self.client._Github__requester
 
-        logger.debug("Fetching issue ID for source", source_id=source_id)
-        result = self.client.execute(
-            query, variable_values={"owner": self.owner, "name": self.repo, "number": int(source_id)}
-        )
-        source_issue_id = result["repository"]["issue"]["id"]
-
-        # Process each target
         for target_id in target_ids:
-            logger.debug("Fetching issue ID for target", target_id=target_id)
-            result = self.client.execute(
-                query, variable_values={"owner": self.owner, "name": self.repo, "number": int(target_id)}
-            )
-            target_issue_id = result["repository"]["issue"]["id"]
-
             if link_type == "blocked by":
-                # source_id is blocked by target_id
-                mutation = gql(
-                    """
-                    mutation AddBlockedBy($issueId: ID!, $blockingIssueId: ID!) {
-                        addBlockedBy(input: {
-                            issueId: $issueId
-                            blockingIssueId: $blockingIssueId
-                        }) {
-                            issue {
-                                number
-                            }
-                            blockingIssue {
-                                number
-                            }
-                        }
-                    }
-                """
-                )
+                # source_id is blocked by target_id - use REST API
                 logger.debug("Adding 'blocked by' relationship", blocked_issue=source_id, blocking_issue=target_id)
-                self.client.execute(
-                    mutation, variable_values={"issueId": source_issue_id, "blockingIssueId": target_issue_id}
+                requester.requestJsonAndCheck(
+                    "POST",
+                    f"/repos/{self.owner}/{self.repo}/issues/{source_id}/dependencies/blocked_by",
+                    input={"issue_id": int(target_id)},
                 )
+
             elif link_type == "blocking":
-                # source_id is blocking target_id (inverse: target is blocked by source)
-                mutation = gql(
-                    """
-                    mutation AddBlockedBy($issueId: ID!, $blockingIssueId: ID!) {
-                        addBlockedBy(input: {
-                            issueId: $issueId
-                            blockingIssueId: $blockingIssueId
-                        }) {
-                            issue {
-                                number
-                            }
-                            blockingIssue {
-                                number
-                            }
-                        }
-                    }
-                """
-                )
+                # source_id is blocking target_id - add blocked_by in reverse
                 logger.debug("Adding 'blocking' relationship", blocking_issue=source_id, blocked_issue=target_id)
-                self.client.execute(
-                    mutation, variable_values={"issueId": target_issue_id, "blockingIssueId": source_issue_id}
+                requester.requestJsonAndCheck(
+                    "POST",
+                    f"/repos/{self.owner}/{self.repo}/issues/{target_id}/dependencies/blocked_by",
+                    input={"issue_id": int(source_id)},
                 )
+
             elif link_type == "parent":
-                # source_id is parent of target_id
-                mutation = gql(
-                    """
-                    mutation AddSubIssue($issueId: ID!, $subIssueId: ID!) {
-                        addSubIssue(input: {
-                            issueId: $issueId
-                            subIssueId: $subIssueId
-                        }) {
-                            issue {
-                                number
-                            }
-                            subIssue {
-                                number
-                            }
-                        }
-                    }
-                """
-                )
+                # source_id is parent of target_id - use REST API
                 logger.debug("Adding 'parent' relationship", parent=source_id, child=target_id)
-                self.client.execute(
-                    mutation, variable_values={"issueId": source_issue_id, "subIssueId": target_issue_id}
+                requester.requestJsonAndCheck(
+                    "POST",
+                    f"/repos/{self.owner}/{self.repo}/issues/{source_id}/sub_issues",
+                    input={"sub_issue_id": int(target_id)},
                 )
 
         logger.info("Link added successfully", source_id=source_id, target_ids=target_ids, link_type=link_type)
 
     def remove_link(self, source_id: str, target_ids: list[str], link_type: str, recursive: bool = False) -> None:
-        """Remove links using GitHub's native issue relationships.
+        """Remove links using GitHub's REST API for issue relationships.
 
         Supported link types:
         - 'blocked by': Removes source_id being blocked by target_ids
@@ -679,107 +300,39 @@ class GitHubBackend(Backend):
                 f"Unsupported link type: '{link_type}'. GitHub backend supports: 'blocked by', 'blocking', 'parent'"
             )
 
-        # Get issue IDs for source and all targets
-        query = gql(
-            """
-            query GetIssueId($owner: String!, $name: String!, $number: Int!) {
-                repository(owner: $owner, name: $name) {
-                    issue(number: $number) {
-                        id
-                    }
-                }
-            }
-        """
-        )
+        # Get the underlying requester for direct API access
+        requester = self.client._Github__requester
 
-        logger.debug("Fetching issue ID for source", source_id=source_id)
-        result = self.client.execute(
-            query, variable_values={"owner": self.owner, "name": self.repo, "number": int(source_id)}
-        )
-        source_issue_id = result["repository"]["issue"]["id"]
-
-        # Process each target
         for target_id in target_ids:
-            logger.debug("Fetching issue ID for target", target_id=target_id)
-            result = self.client.execute(
-                query, variable_values={"owner": self.owner, "name": self.repo, "number": int(target_id)}
-            )
-            target_issue_id = result["repository"]["issue"]["id"]
-
             if link_type == "blocked by":
-                # Remove source_id being blocked by target_id
-                mutation = gql(
-                    """
-                    mutation RemoveBlockedBy($issueId: ID!, $blockingIssueId: ID!) {
-                        removeBlockedBy(input: {
-                            issueId: $issueId
-                            blockingIssueId: $blockingIssueId
-                        }) {
-                            issue {
-                                number
-                            }
-                            blockingIssue {
-                                number
-                            }
-                        }
-                    }
-                """
-                )
+                # Remove source_id being blocked by target_id - use REST API
                 logger.debug("Removing 'blocked by' relationship", blocked_issue=source_id, blocking_issue=target_id)
-                self.client.execute(
-                    mutation, variable_values={"issueId": source_issue_id, "blockingIssueId": target_issue_id}
+                requester.requestJsonAndCheck(
+                    "DELETE",
+                    f"/repos/{self.owner}/{self.repo}/issues/{source_id}/dependencies/blocked_by/{target_id}",
                 )
+
             elif link_type == "blocking":
-                # Remove source_id blocking target_id (inverse: target blocked by source)
-                mutation = gql(
-                    """
-                    mutation RemoveBlockedBy($issueId: ID!, $blockingIssueId: ID!) {
-                        removeBlockedBy(input: {
-                            issueId: $issueId
-                            blockingIssueId: $blockingIssueId
-                        }) {
-                            issue {
-                                number
-                            }
-                            blockingIssue {
-                                number
-                            }
-                        }
-                    }
-                """
-                )
+                # Remove source_id blocking target_id - remove blocked_by in reverse
                 logger.debug("Removing 'blocking' relationship", blocking_issue=source_id, blocked_issue=target_id)
-                self.client.execute(
-                    mutation, variable_values={"issueId": target_issue_id, "blockingIssueId": source_issue_id}
+                requester.requestJsonAndCheck(
+                    "DELETE",
+                    f"/repos/{self.owner}/{self.repo}/issues/{target_id}/dependencies/blocked_by/{source_id}",
                 )
+
             elif link_type == "parent":
-                # Remove source_id as parent of target_id
-                mutation = gql(
-                    """
-                    mutation RemoveSubIssue($issueId: ID!, $subIssueId: ID!) {
-                        removeSubIssue(input: {
-                            issueId: $issueId
-                            subIssueId: $subIssueId
-                        }) {
-                            issue {
-                                number
-                            }
-                            subIssue {
-                                number
-                            }
-                        }
-                    }
-                """
-                )
+                # Remove source_id as parent of target_id - use REST API
                 logger.debug("Removing 'parent' relationship", parent=source_id, child=target_id)
-                self.client.execute(
-                    mutation, variable_values={"issueId": source_issue_id, "subIssueId": target_issue_id}
+                requester.requestJsonAndCheck(
+                    "DELETE",
+                    f"/repos/{self.owner}/{self.repo}/issues/{source_id}/sub_issue",
+                    input={"sub_issue_id": int(target_id)},
                 )
 
         logger.info("Link removed successfully", source_id=source_id, target_ids=target_ids, link_type=link_type)
 
     def list_links(self, entity_id: str, link_type: str | None = None) -> list[Link]:
-        """List links for an issue using GitHub's native issue relationships.
+        """List links for an issue using GitHub's REST API.
 
         Supported link types:
         - 'blocked by': Issues that block this issue
@@ -810,71 +363,64 @@ class GitHubBackend(Backend):
                     "GitHub backend supports: 'blocked by', 'blocking', 'parent', 'children'"
                 )
 
-        # Query to get all relationship types
-        query = gql(
-            """
-            query GetIssueLinks($owner: String!, $name: String!, $number: Int!) {
-                repository(owner: $owner, name: $name) {
-                    issue(number: $number) {
-                        number
-                        blockedBy(first: 100) {
-                            nodes {
-                                number
-                            }
-                        }
-                        blocking(first: 100) {
-                            nodes {
-                                number
-                            }
-                        }
-                        parent {
-                            number
-                        }
-                        subIssues(first: 100) {
-                            nodes {
-                                number
-                            }
-                        }
-                    }
-                }
-            }
-        """
-        )
-
-        logger.debug("Fetching issue relationships", entity_id=entity_id)
-        result = self.client.execute(
-            query, variable_values={"owner": self.owner, "name": self.repo, "number": int(entity_id)}
-        )
-        issue_data = result["repository"]["issue"]
+        # Get the underlying requester for direct API access
+        requester = self.client._Github__requester
 
         links: list[Link] = []
 
-        # Process blocked by relationships
+        # Get blocked by relationships
         if not link_type or link_type == "blocked by":
-            for blocking_issue in issue_data.get("blockedBy", {}).get("nodes", []):
-                links.append(Link(source_id=entity_id, target_id=str(blocking_issue["number"]), link_type="blocked by"))
+            logger.debug("Fetching 'blocked by' relationships", entity_id=entity_id)
+            try:
+                _, data = requester.requestJsonAndCheck(
+                    "GET", f"/repos/{self.owner}/{self.repo}/issues/{entity_id}/dependencies/blocked_by"
+                )
+                for issue in data:
+                    links.append(Link(source_id=entity_id, target_id=str(issue["number"]), link_type="blocked by"))
+            except Exception as e:
+                logger.debug("No blocked_by relationships found", entity_id=entity_id, error=str(e))
 
-        # Process blocking relationships
+        # Get blocking relationships
         if not link_type or link_type == "blocking":
-            for blocked_issue in issue_data.get("blocking", {}).get("nodes", []):
-                links.append(Link(source_id=entity_id, target_id=str(blocked_issue["number"]), link_type="blocking"))
+            logger.debug("Fetching 'blocking' relationships", entity_id=entity_id)
+            try:
+                _, data = requester.requestJsonAndCheck(
+                    "GET", f"/repos/{self.owner}/{self.repo}/issues/{entity_id}/dependencies/blocking"
+                )
+                for issue in data:
+                    links.append(Link(source_id=entity_id, target_id=str(issue["number"]), link_type="blocking"))
+            except Exception as e:
+                logger.debug("No blocking relationships found", entity_id=entity_id, error=str(e))
 
-        # Process parent relationship
+        # Get parent relationship
         if not link_type or link_type == "parent":
-            parent = issue_data.get("parent")
-            if parent:
-                links.append(Link(source_id=entity_id, target_id=str(parent["number"]), link_type="parent"))
+            logger.debug("Fetching parent relationship", entity_id=entity_id)
+            try:
+                _, data = requester.requestJsonAndCheck(
+                    "GET", f"/repos/{self.owner}/{self.repo}/issues/{entity_id}/parent"
+                )
+                if data:
+                    links.append(Link(source_id=entity_id, target_id=str(data["number"]), link_type="parent"))
+            except Exception as e:
+                logger.debug("No parent relationship found", entity_id=entity_id, error=str(e))
 
-        # Process children (sub-issues)
+        # Get children (sub-issues)
         if not link_type or link_type == "children":
-            for sub_issue in issue_data.get("subIssues", {}).get("nodes", []):
-                links.append(Link(source_id=entity_id, target_id=str(sub_issue["number"]), link_type="children"))
+            logger.debug("Fetching sub-issues", entity_id=entity_id)
+            try:
+                _, data = requester.requestJsonAndCheck(
+                    "GET", f"/repos/{self.owner}/{self.repo}/issues/{entity_id}/sub_issues"
+                )
+                for issue in data:
+                    links.append(Link(source_id=entity_id, target_id=str(issue["number"]), link_type="children"))
+            except Exception as e:
+                logger.debug("No sub-issues found", entity_id=entity_id, error=str(e))
 
         logger.debug("Retrieved issue links", entity_id=entity_id, count=len(links))
         return links
 
     def get_link_tree(self, entity_id: str) -> dict[str, Any]:
-        """Get hierarchical link tree for an issue.
+        """Get hierarchical link tree for an issue using REST API.
 
         Builds a tree structure showing the issue and its related issues:
         - Sub-issues (children)
@@ -903,59 +449,18 @@ class GitHubBackend(Backend):
         """
         logger.info("Getting link tree for issue", entity_id=entity_id)
 
-        # Query to get all relationships
-        query = gql(
-            """
-            query GetIssueLinks($owner: String!, $name: String!, $number: Int!) {
-                repository(owner: $owner, name: $name) {
-                    issue(number: $number) {
-                        number
-                        title
-                        state
-                        blockedBy(first: 100) {
-                            nodes {
-                                number
-                                title
-                                state
-                            }
-                        }
-                        blocking(first: 100) {
-                            nodes {
-                                number
-                                title
-                                state
-                            }
-                        }
-                        parent {
-                            number
-                            title
-                            state
-                        }
-                        subIssues(first: 100) {
-                            nodes {
-                                number
-                                title
-                                state
-                            }
-                        }
-                    }
-                }
-            }
-        """
-        )
+        # Get the main issue
+        issue = self.repository.get_issue(number=int(entity_id))
 
-        logger.debug("Fetching issue relationships for tree", entity_id=entity_id)
-        result = self.client.execute(
-            query, variable_values={"owner": self.owner, "name": self.repo, "number": int(entity_id)}
-        )
-        issue_data = result["repository"]["issue"]
+        # Get the underlying requester for direct API access
+        requester = self.client._Github__requester
 
         # Build tree structure with entity and links sections
         tree: dict[str, Any] = {
             "entity": {
-                "id": str(issue_data["number"]),
-                "title": issue_data["title"],
-                "state": issue_data["state"].lower(),
+                "id": str(issue.number),
+                "title": issue.title,
+                "state": issue.state.lower(),
             },
             "links": {
                 "children": [],
@@ -965,46 +470,69 @@ class GitHubBackend(Backend):
             },
         }
 
-        # Add sub-issues (children)
-        for sub_issue in issue_data.get("subIssues", {}).get("nodes", []):
-            tree["links"]["children"].append(
-                {
-                    "id": str(sub_issue["number"]),
-                    "title": sub_issue["title"],
-                    "state": sub_issue["state"].lower(),
-                }
+        # Get blocked by relationships
+        try:
+            _, blocked_by_data = requester.requestJsonAndCheck(
+                "GET", f"/repos/{self.owner}/{self.repo}/issues/{entity_id}/dependencies/blocked_by"
             )
+            for blocking_issue in blocked_by_data:
+                tree["links"]["blocked_by"].append(
+                    {
+                        "id": str(blocking_issue["number"]),
+                        "title": blocking_issue["title"],
+                        "state": blocking_issue["state"].lower(),
+                    }
+                )
+        except Exception as e:
+            logger.debug("No blocked_by relationships", entity_id=entity_id, error=str(e))
 
-        # Add issues this one blocks
-        for blocked_issue in issue_data.get("blocking", {}).get("nodes", []):
-            tree["links"]["blocking"].append(
-                {
-                    "id": str(blocked_issue["number"]),
-                    "title": blocked_issue["title"],
-                    "state": blocked_issue["state"].lower(),
-                }
+        # Get blocking relationships
+        try:
+            _, blocking_data = requester.requestJsonAndCheck(
+                "GET", f"/repos/{self.owner}/{self.repo}/issues/{entity_id}/dependencies/blocking"
             )
+            for blocked_issue in blocking_data:
+                tree["links"]["blocking"].append(
+                    {
+                        "id": str(blocked_issue["number"]),
+                        "title": blocked_issue["title"],
+                        "state": blocked_issue["state"].lower(),
+                    }
+                )
+        except Exception as e:
+            logger.debug("No blocking relationships", entity_id=entity_id, error=str(e))
 
-        # Add issues blocking this one
-        for blocking_issue in issue_data.get("blockedBy", {}).get("nodes", []):
-            tree["links"]["blocked_by"].append(
-                {
-                    "id": str(blocking_issue["number"]),
-                    "title": blocking_issue["title"],
-                    "state": blocking_issue["state"].lower(),
-                }
+        # Get parent
+        try:
+            _, parent_data = requester.requestJsonAndCheck(
+                "GET", f"/repos/{self.owner}/{self.repo}/issues/{entity_id}/parent"
             )
+            if parent_data:
+                tree["links"]["parent"].append(
+                    {
+                        "id": str(parent_data["number"]),
+                        "title": parent_data["title"],
+                        "state": parent_data["state"].lower(),
+                    }
+                )
+        except Exception as e:
+            logger.debug("No parent relationship", entity_id=entity_id, error=str(e))
 
-        # Add parent if exists
-        parent = issue_data.get("parent")
-        if parent:
-            tree["links"]["parent"].append(
-                {
-                    "id": str(parent["number"]),
-                    "title": parent["title"],
-                    "state": parent["state"].lower(),
-                }
+        # Get sub-issues
+        try:
+            _, sub_issues_data = requester.requestJsonAndCheck(
+                "GET", f"/repos/{self.owner}/{self.repo}/issues/{entity_id}/sub_issues"
             )
+            for sub_issue in sub_issues_data:
+                tree["links"]["children"].append(
+                    {
+                        "id": str(sub_issue["number"]),
+                        "title": sub_issue["title"],
+                        "state": sub_issue["state"].lower(),
+                    }
+                )
+        except Exception as e:
+            logger.debug("No sub-issues", entity_id=entity_id, error=str(e))
 
         logger.info(
             "Link tree retrieved",
