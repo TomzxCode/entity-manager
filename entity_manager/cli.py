@@ -292,7 +292,7 @@ def list_config() -> None:
 @app.meta.default
 def main(
     *tokens: Annotated[str, Parameter(show=False, allow_leading_hyphen=True)],
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO",
+    log_level: Literal["debug", "info", "warning", "error", "critical"] = "critical",
 ) -> None:
     """Main entry point with global options."""
     configure_logging(log_level)
