@@ -35,7 +35,7 @@ class GitHubBackend(Backend):
             url="https://api.github.com/graphql",
             headers={"Authorization": f"bearer {self.token}"},
         )
-        self.client = Client(transport=transport, fetch_schema_from_transport=True)
+        self.client = Client(transport=transport)
         self._config: dict[str, str] = {}
         logger.info("GitHub backend initialized", owner=owner, repo=repo)
 
