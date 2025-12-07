@@ -6,11 +6,31 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "cyclopts>=4.3.0",
+    "gql>=3.5.0",
+    "aiohttp>=3.11.11",
+    "structlog>=24.4.0",
+    "python-dotenv>=1.2.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+    "ruff>=0.9.1",
 ]
 
 [project.scripts]
-entity-manager = "entity_manager.cli:app"
-em = "entity_manager.cli:app"
+entity-manager = "entity_manager.cli:app.meta"
+em = "entity_manager.cli:app.meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
 
 [build-system]
 requires = ["hatchling"]
