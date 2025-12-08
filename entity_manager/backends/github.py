@@ -1,6 +1,5 @@
 """GitHub REST API backend implementation using PyGithub."""
 
-import os
 from typing import Any
 
 import structlog
