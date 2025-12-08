@@ -61,6 +61,38 @@ bd init
 
 **Note:** With beads backend, entity IDs use the beads hash format (e.g., `bd-a1b2` instead of numeric IDs)
 
+### Notion Backend
+
+1. Set the backend type to Notion:
+```bash
+em config set backend notion --global
+```
+
+2. Configure Notion integration:
+```bash
+# Set your Notion integration token
+em config set notion.token your-notion-integration-token --global
+
+# Set the database ID to use for entities
+em config set notion.database_id your-database-id
+```
+
+3. Create a Notion integration and get your token at https://www.notion.so/my-integrations
+
+4. Database Schema Requirements:
+Your Notion database should have the following properties:
+- `Name` (Title) - Entity title
+- `Description` (Rich Text) - Entity description
+- `Status` (Status) - Entity status (open, in progress, closed, etc.)
+- `Labels` (Multi-select) - Entity labels/tags
+- `Assignee` (People) - Entity assignee
+- `Blocked By` (Relation) - Links to blocking entities
+- `Blocking` (Relation) - Links to blocked entities
+- `Parent` (Relation) - Parent entity link
+- `Children` (Relation) - Child entity links
+
+**Note:** Notion backend uses page IDs (UUIDs with hyphens) as entity IDs.
+
 ## Concepts
 
 - **Entity**: A core object that holds data and metadata.

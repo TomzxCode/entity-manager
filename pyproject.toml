@@ -9,6 +9,7 @@ dependencies = [
     "PyGithub>=2.4.0",
     "structlog>=24.4.0",
     "pyyaml>=6.0.2",
+    "notion-client>=2.7.0",
 ]
 
 [dependency-groups]

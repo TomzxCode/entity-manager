@@ -28,7 +28,6 @@ def configure_logging(log_level: str) -> None:
 
 def get_backend() -> Backend:
     """Get the configured backend."""
-    import os
 
     config = get_config()
     backend_type = config.get("backend", "github")
