@@ -389,41 +389,6 @@ class BeadsBackend(Backend):
 
         return []
 
-    def get_config(self, key: str) -> str | None:
-        """Get beads configuration value."""
-        logger.debug("Getting beads config value", key=key)
-
-        try:
-            result = self._run_bd_command(["config", "get", key, "--json"])
-            if isinstance(result, dict):
-                return result.get("value")
-        except subprocess.CalledProcessError:
-            # Config key doesn't exist
-            return None
-
-        return None
-
-    def set_config(self, key: str, value: str) -> None:
-        """Set beads configuration value."""
-        logger.debug("Setting beads config value", key=key, value=value)
-        self._run_bd_command(["config", "set", key, value, "--json"])
-
-    def unset_config(self, key: str) -> None:
-        """Unset beads configuration value."""
-        logger.debug("Unsetting beads config value", key=key)
-        self._run_bd_command(["config", "unset", key, "--json"])
-
-    def list_config(self) -> dict[str, str]:
-        """List all beads configuration."""
-        logger.debug("Listing all beads config values")
-
-        result = self._run_bd_command(["config", "list", "--json"])
-
-        if isinstance(result, dict):
-            return result
-
-        return {}
-
     def sync(self) -> None:
         """Sync beads database (useful to call at end of operations)."""
         logger.info("Syncing beads database")

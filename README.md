@@ -10,29 +10,50 @@ uv tool install git+https://github.com/TomzxCode/entity-manager
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and configure your backend:
+Configuration can be stored in two locations:
+- **Local config**: `.entity-manager/config.yaml` in the current directory (repository-specific)
+- **Global config**: `~/.entity-manager/config.yaml` in your home directory (user-wide)
 
-```bash
-cp .env.example .env
-```
+By default, commands use local config with global fallback. Use the `--global` flag to explicitly target global config.
 
 ### GitHub Backend
 
-For GitHub backend, set these environment variables:
-- `EM_BACKEND=github`
-- `EM_GITHUB_OWNER=your-username`
-- `EM_GITHUB_REPO=your-repo`
-- `GITHUB_TOKEN=your-github-personal-access-token`
+1. Set the backend type to GitHub (global):
+```bash
+em config set backend github --global
+```
+
+2. Configure GitHub repository (can be local or global):
+```bash
+# Local (repository-specific)
+em config set github.owner your-username
+em config set github.repository your-repo
+
+# Or global (user-wide default)
+em config set github.owner your-username --global
+em config set github.repository your-repo --global
+```
+
+3. Set your GitHub token:
+```bash
+em config set github.token your-github-personal-access-token --global
+```
 
 Create a GitHub personal access token with `repo` scope at https://github.com/settings/tokens
 
 ### Beads Backend
 
-For Beads backend, set these environment variables:
-- `EM_BACKEND=beads`
-- `EM_BEADS_PROJECT_PATH=/path/to/project` (optional, defaults to current directory)
+1. Set the backend type to Beads:
+```bash
+em config set backend beads --global
+```
 
-Install beads from https://github.com/steveyegge/beads and initialize in your project:
+2. Configure project path (optional, defaults to current directory):
+```bash
+em config set beads.project_path /path/to/project
+```
+
+3. Install beads from https://github.com/steveyegge/beads and initialize in your project:
 ```bash
 cd /path/to/project
 bd init
@@ -99,16 +120,23 @@ em link cycle
 
 ## Configuration
 
+Configuration supports both local (`.entity-manager/config.yaml`) and global (`~/.entity-manager/config.yaml`) scopes.
+Use `--global` to target global config, otherwise local config is used with global fallback.
+
 ```bash
 # Sets a configuration setting
-em config set key value
+em config set key value           # Local
+em config set key value --global  # Global
 
 # Unsets a configuration setting
-em config unset key
+em config unset key           # Local
+em config unset key --global  # Global
 
 # Gets the value of a configuration setting
-em config get key
+em config get key           # Local with global fallback
+em config get key --global  # Global only
 
 # Lists all configuration settings
-em config list
+em config list           # Merged local + global
+em config list --global  # Global only
 ```

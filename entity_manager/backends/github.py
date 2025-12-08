@@ -23,19 +23,18 @@ class GitHubBackend(Backend):
         Args:
             owner: Repository owner
             repo: Repository name
-            token: GitHub personal access token (defaults to GITHUB_TOKEN env var)
+            token: GitHub personal access token
         """
         self.owner = owner
         self.repo = repo
-        self.token = token or os.getenv("GITHUB_TOKEN")
+        self.token = token
         if not self.token:
-            raise ValueError("GitHub token required (set GITHUB_TOKEN env var or pass token)")
+            raise ValueError("GitHub token required")
 
         logger.debug("Initializing GitHub backend", owner=owner, repo=repo)
         auth = Auth.Token(self.token)
         self.client = Github(auth=auth)
         self.repository: Repository = self.client.get_repo(f"{owner}/{repo}")
-        self._config: dict[str, str] = {}
         logger.info("GitHub backend initialized", owner=owner, repo=repo)
 
     def _parse_labels(self, labels_str: str) -> dict[str, str]:
@@ -548,23 +547,3 @@ class GitHubBackend(Backend):
         """Find cycles in link graph."""
         logger.debug("Finding cycles in link graph")
         return []
-
-    def get_config(self, key: str) -> str | None:
-        """Get configuration value."""
-        logger.debug("Getting config value", key=key)
-        return self._config.get(key)
-
-    def set_config(self, key: str, value: str) -> None:
-        """Set configuration value."""
-        logger.debug("Setting config value", key=key, value=value)
-        self._config[key] = value
-
-    def unset_config(self, key: str) -> None:
-        """Unset configuration value."""
-        logger.debug("Unsetting config value", key=key)
-        self._config.pop(key, None)
-
-    def list_config(self) -> dict[str, str]:
-        """List all configuration."""
-        logger.debug("Listing all config values")
-        return self._config.copy()

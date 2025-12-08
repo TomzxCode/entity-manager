@@ -94,23 +94,3 @@ class Backend(ABC):
     def find_cycles(self) -> list[list[str]]:
         """Find and return all cycles in the link graph."""
         pass
-
-    @abstractmethod
-    def get_config(self, key: str) -> str | None:
-        """Get a configuration value."""
-        pass
-
-    @abstractmethod
-    def set_config(self, key: str, value: str) -> None:
-        """Set a configuration value."""
-        pass
-
-    @abstractmethod
-    def unset_config(self, key: str) -> None:
-        """Unset a configuration value."""
-        pass
-
-    @abstractmethod
-    def list_config(self) -> dict[str, str]:
-        """List all configuration settings."""
-        pass

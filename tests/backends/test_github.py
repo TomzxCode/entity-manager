@@ -26,7 +26,6 @@ def mock_repository() -> Mock:
 @pytest.fixture
 def github_backend(mock_github_client: Mock, mock_repository: Mock, monkeypatch: pytest.MonkeyPatch) -> GitHubBackend:
     """Create a GitHub backend with mocked client."""
-    monkeypatch.setenv("GITHUB_TOKEN", "fake_token")
 
     # Mock the get_repo method to return our mock repository
     mock_github_client.get_repo.return_value = mock_repository
