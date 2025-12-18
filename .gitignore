@@ -11,3 +11,6 @@ htmlcov/
 dist/
 build/
 .pytest_cache/
+AGENTS.md
+@AGENTS.md
+.gitattributes
