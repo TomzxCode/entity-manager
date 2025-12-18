@@ -135,8 +135,10 @@ def update(
 @app.command
 def delete(*entity_ids: str) -> None:
     """Delete one or more entities."""
+    import builtins
+
     backend = get_backend()
-    backend.delete(list(entity_ids))
+    backend.delete(builtins.list(entity_ids))
     print(f"Deleted {len(entity_ids)} entity(ies)")
 
 

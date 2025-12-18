@@ -90,7 +90,7 @@ class BeadsBackend(Backend):
                 labels[label] = ""
 
         entity = Entity(
-            id=str(bead["id"]),  # Using the hash ID directly (bd-a1b2 format), converted to str
+            id=str(bead["id"]),  # Using the bead ID directly (e.g., "entity-manager-abc" or "bd-a1b2")
             title=bead.get("title", ""),
             description=bead.get("description", ""),
             labels=labels,
@@ -116,14 +116,11 @@ class BeadsBackend(Backend):
             entity_id: Entity ID (string)
 
         Returns:
-            Beads ID string (bd-xxxx format)
+            Beads ID string (project-prefix-hash format)
         """
-        # If already in beads format, return as-is
-        if entity_id.startswith("bd-"):
-            return entity_id
-
-        # Otherwise, assume it's a bead hash ID without the bd- prefix
-        return f"bd-{entity_id}"
+        # Beads IDs are already in the correct format (e.g., "entity-manager-abc" or "bd-a1b2")
+        # No conversion needed - return as-is
+        return entity_id
 
     def create(
         self,
@@ -162,7 +159,11 @@ class BeadsBackend(Backend):
         logger.info("Reading beads issue", entity_id=bead_id)
 
         result = self._run_bd_command(["show", bead_id, "--json"])
-        if isinstance(result, dict):
+        if isinstance(result, list) and len(result) > 0:
+            entity = self._bead_to_entity(result[0])
+            logger.debug("Beads issue read successfully", entity_id=bead_id)
+            return entity
+        elif isinstance(result, dict):
             entity = self._bead_to_entity(result)
             logger.debug("Beads issue read successfully", entity_id=bead_id)
             return entity
@@ -268,9 +269,16 @@ class BeadsBackend(Backend):
 
         # Map entity manager link types to beads dependency types
         # beads supports: blocks, related, parent-child, discovered-from
-        beads_type = link_type
-        if link_type == "relates_to":
-            beads_type = "related"
+        link_type_lower = link_type.lower().replace("_", "-").replace(" ", "-")
+        beads_type_map = {
+            "relates-to": "related",
+            "blocked-by": "blocks",
+            "blocking": "blocks",  # Inverse relationship
+            "parent": "parent-child",
+            "child": "parent-child",
+            "children": "parent-child",
+        }
+        beads_type = beads_type_map.get(link_type_lower, link_type_lower)
 
         for target_id in target_ids:
             target_bead_id = self._entity_id_to_bead_id(target_id)
@@ -288,9 +296,17 @@ class BeadsBackend(Backend):
             link_type=link_type,
         )
 
-        beads_type = link_type
-        if link_type == "relates_to":
-            beads_type = "related"
+        # Map entity manager link types to beads dependency types
+        link_type_lower = link_type.lower().replace("_", "-").replace(" ", "-")
+        beads_type_map = {
+            "relates-to": "related",
+            "blocked-by": "blocks",
+            "blocking": "blocks",  # Inverse relationship
+            "parent": "parent-child",
+            "child": "parent-child",
+            "children": "parent-child",
+        }
+        beads_type = beads_type_map.get(link_type_lower, link_type_lower)
 
         for target_id in target_ids:
             target_bead_id = self._entity_id_to_bead_id(target_id)
