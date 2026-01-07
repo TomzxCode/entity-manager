@@ -2,6 +2,36 @@
 
 An entity manager for LLMs.
 
+## Purpose
+
+Entity Manager is a tool designed to enable LLMs to work efficiently with structured data in a directed graph format. It addresses two key use cases:
+
+### 1. External Data Source Integration
+
+Entity Manager can interact with external data sources such as GitHub issues, Beads, Notion, Jira, Linear, and more. It maintains a local synchronized copy that LLMs can quickly interact with without repeatedly calling remote APIs. This provides:
+
+- **Fast local queries**: No latency from API calls
+- **Reduced API rate limits**: Minimize external service usage
+- **Offline capability**: Work with cached data when services are unavailable
+- **Unified interface**: Single API across different backends
+
+### 2. LLM Collaboration on Complex Projects
+
+The main purpose of Entity Manager is to enable multiple LLM agents to collaborate effectively on large, complex projects. It addresses a critical challenge in AI-assisted development: **ensuring only one agent works on a requirement at a time while properly tracking dependencies**.
+
+Without such a system:
+- Multiple agents might work on the same requirement simultaneously
+- Dependencies between requirements are hard to track
+- Work coordination becomes chaotic as team size grows
+- Progress visibility is limited
+
+Entity Manager solves this by:
+- **Task creation and assignment**: Create entities representing requirements and assign them to specific agents
+- **Dependency tracking**: Use directed links (e.g., "blocked-by") to express relationships between requirements
+- **Status management**: Track the state of each requirement (open, in-progress, closed)
+- **Collision prevention**: Agents can query which tasks are assigned, avoiding duplicate work
+- **Progress visibility**: See what's being worked on and what's blocked
+
 ## Installation
 
 ```bash
