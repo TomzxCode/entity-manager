@@ -13,7 +13,7 @@ Describes the core data model for entities, including fields (id, title, descrip
 ### [Link Management](./link-management.md)
 Covers the directed graph relationship system between entities. Includes link types (blocked by, blocking, parent, children), link operations, graph traversal, cycle detection, and use cases for LLM collaboration.
 
-### [Configuration Management](./config-management.md)
+### [Configuration Management](./configuration-management.md)
 Specifies the hierarchical configuration system supporting both repository-local and user-global settings. Covers configuration storage, precedence rules, backend configuration, and security considerations.
 
 ### [CLI Interface](./cli-interface.md)

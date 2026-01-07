@@ -48,6 +48,13 @@ nav:
   - Getting Started: getting-started.md
   - Usage: usage.md
   - Architecture: architecture.md
+  - Specifications:
+      - Overview: spec/README.md
+      - Backend Interface: spec/backend-interface.md
+      - Entity Management: spec/entity-management.md
+      - Link Management: spec/link-management.md
+      - Configuration Management: spec/configuration-management.md
+      - CLI Interface: spec/cli-interface.md
 
 markdown_extensions:
   - pymdownx.highlight:
