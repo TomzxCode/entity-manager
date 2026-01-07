@@ -3,7 +3,7 @@ name = "entity-manager"
 version = "0.1.0"
 description = "An entity manager for LLMs."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "cyclopts>=4.3.0,<5",
     "PyGithub>=2.8.1,<3",
