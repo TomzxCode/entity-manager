@@ -1,14 +1,14 @@
 site_name: Entity Manager
 site_description: An entity manager for LLMs
-site_url: https://github.com/tomzx/entity-manager
-repo_name: tomzx/entity-manager
-repo_url: https://github.com/tomzx/entity-manager
+site_url: https://github.com/tomzxcode/entity-manager
+repo_name: tomzxcode/entity-manager
+repo_url: https://github.com/tomzxcode/entity-manager
 edit_uri: edit/main/docs/
 
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/tomzx/entity-manager
+      link: https://github.com/tomzxcode/entity-manager
 
 theme:
   name: material
