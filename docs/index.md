@@ -16,8 +16,8 @@ Entity Manager is a tool designed to help manage and track entities across your 
 ## Quick Start
 
 ```bash
-# Install the package
-uv pip install entity-manager
+# Install the tool
+uv tool install git+https://github.com/TomzxCode/entity-manager
 
 # Run the CLI
 entity-manager --help

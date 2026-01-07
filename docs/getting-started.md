@@ -5,13 +5,7 @@
 ### Using uv
 
 ```bash
-uv pip install entity-manager
-```
-
-### Using pip
-
-```bash
-pip install entity-manager
+uv tool install git+https://github.com/TomzxCode/entity-manager
 ```
 
 ## Configuration
@@ -32,10 +26,7 @@ NOTION_DATABASE_ID=your_database_id_here
 Once installed, you can use the CLI:
 
 ```bash
-# Show help
-entity-manager --help
-
-# Show available commands
+# Show help/available commands
 entity-manager --help
 ```
 
