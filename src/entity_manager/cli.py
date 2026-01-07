@@ -6,7 +6,8 @@ import structlog
 from cyclopts import App, Parameter
 
 from entity_manager.backend import Backend
-from entity_manager.backends import BeadsBackend, GitHubBackend
+from entity_manager.backends.beads import BeadsBackend
+from entity_manager.backends.github import GitHubBackend
 from entity_manager.config import get_config
 from entity_manager.config_commands import config_app
 from entity_manager.link_commands import link_app
