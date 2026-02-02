@@ -244,3 +244,345 @@ def test_remove_link_case_insensitive(github_backend: GitHubBackend) -> None:
 
     # Verify the REST API was called
     mock_requester.requestJsonAndCheck.assert_called_once()
+
+
+def test_init_without_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test initialization without token raises error."""
+    with pytest.raises(ValueError, match="GitHub token required"):
+        GitHubBackend(owner="test_owner", repo="test_repo", token=None)
+
+
+def test_create_issue(github_backend: GitHubBackend, mock_repository: Mock) -> None:
+    """Test creating a GitHub issue."""
+    # Mock the created issue
+    mock_issue = MagicMock()
+    mock_issue.number = 1
+    mock_issue.title = "Test Issue"
+    mock_issue.body = "Test description"
+    mock_issue.state = "open"
+    mock_issue.labels = []
+    mock_issue.assignee = None
+    mock_issue.html_url = "https://github.com/test_owner/test_repo/issues/1"
+    mock_issue.created_at = MagicMock()
+    mock_issue.created_at.isoformat = lambda: "2024-01-01T00:00:00"
+    mock_issue.updated_at = MagicMock()
+    mock_issue.updated_at.isoformat = lambda: "2024-01-01T00:00:00"
+
+    mock_repository.create_issue.return_value = mock_issue
+    mock_repository.get_labels.return_value = []
+
+    entity = github_backend.create("Test Issue", description="Test description")
+
+    assert entity.id == "1"
+    assert entity.title == "Test Issue"
+    assert entity.description == "Test description"
+    mock_repository.create_issue.assert_called_once()
+
+
+def test_create_issue_with_labels(github_backend: GitHubBackend, mock_repository: Mock) -> None:
+    """Test creating issue with labels."""
+    # Mock the created issue
+    mock_issue = MagicMock()
+    mock_issue.number = 1
+    mock_issue.title = "Test Issue"
+    mock_issue.body = ""
+    mock_issue.state = "open"
+    mock_label = MagicMock()
+    mock_label.name = "bug"
+    mock_issue.labels = [mock_label]
+    mock_issue.assignee = None
+    mock_issue.html_url = "https://github.com/test_owner/test_repo/issues/1"
+    mock_issue.created_at = MagicMock()
+    mock_issue.created_at.isoformat = lambda: "2024-01-01T00:00:00"
+    mock_issue.updated_at = MagicMock()
+    mock_issue.updated_at.isoformat = lambda: "2024-01-01T00:00:00"
+
+    mock_repository.create_issue.return_value = mock_issue
+    mock_repository.get_labels.return_value = []
+
+    github_backend.create("Test Issue", labels={"bug": "", "priority": "high"})
+
+    # Verify labels were ensured to exist
+    assert mock_repository.create_label.call_count >= 1
+
+
+def test_read_issue(github_backend: GitHubBackend, mock_repository: Mock) -> None:
+    """Test reading a GitHub issue."""
+    # Mock the issue
+    mock_issue = MagicMock()
+    mock_issue.number = 1
+    mock_issue.title = "Test Issue"
+    mock_issue.body = "Test description"
+    mock_issue.state = "open"
+    mock_label = MagicMock()
+    mock_label.name = "bug"
+    mock_issue.labels = [mock_label]
+    mock_assignee = MagicMock()
+    mock_assignee.login = "test_user"
+    mock_issue.assignee = mock_assignee
+    mock_issue.html_url = "https://github.com/test_owner/test_repo/issues/1"
+    mock_issue.created_at = MagicMock()
+    mock_issue.created_at.isoformat = lambda: "2024-01-01T00:00:00"
+    mock_issue.updated_at = MagicMock()
+    mock_issue.updated_at.isoformat = lambda: "2024-01-01T00:00:00"
+
+    mock_repository.get_issue.return_value = mock_issue
+
+    entity = github_backend.read("1")
+
+    assert entity.id == "1"
+    assert entity.title == "Test Issue"
+    assert entity.assignee == "test_user"
+    assert entity.labels == {"bug": ""}
+    mock_repository.get_issue.assert_called_once_with(number=1)
+
+
+def test_update_issue_title(github_backend: GitHubBackend, mock_repository: Mock) -> None:
+    """Test updating issue title."""
+    # Mock the issue
+    mock_issue = MagicMock()
+    mock_issue.number = 1
+    mock_issue.title = "Updated Title"
+    mock_issue.body = "Test description"
+    mock_issue.state = "open"
+    mock_issue.labels = []
+    mock_issue.assignee = None
+    mock_issue.html_url = "https://github.com/test_owner/test_repo/issues/1"
+    mock_issue.created_at = MagicMock()
+    mock_issue.created_at.isoformat = lambda: "2024-01-01T00:00:00"
+    mock_issue.updated_at = MagicMock()
+    mock_issue.updated_at.isoformat = lambda: "2024-01-01T00:00:00"
+
+    mock_repository.get_issue.return_value = mock_issue
+
+    entity = github_backend.update("1", title="Updated Title")
+
+    assert entity.title == "Updated Title"
+    mock_issue.edit.assert_called_once()
+
+
+def test_update_issue_status(github_backend: GitHubBackend, mock_repository: Mock) -> None:
+    """Test updating issue status."""
+    # Mock the issue
+    mock_issue = MagicMock()
+    mock_issue.number = 1
+    mock_issue.title = "Test Issue"
+    mock_issue.body = ""
+    mock_issue.state = "closed"
+    mock_issue.labels = []
+    mock_issue.assignee = None
+    mock_issue.html_url = "https://github.com/test_owner/test_repo/issues/1"
+    mock_issue.created_at = MagicMock()
+    mock_issue.created_at.isoformat = lambda: "2024-01-01T00:00:00"
+    mock_issue.updated_at = MagicMock()
+    mock_issue.updated_at.isoformat = lambda: "2024-01-01T00:00:00"
+
+    mock_repository.get_issue.return_value = mock_issue
+
+    entity = github_backend.update("1", status="closed")
+
+    assert entity.status == "closed"
+    assert mock_issue.edit.call_count >= 1
+
+
+def test_update_issue_labels(github_backend: GitHubBackend, mock_repository: Mock) -> None:
+    """Test updating issue labels."""
+    # Mock the issue
+    mock_issue = MagicMock()
+    mock_issue.number = 1
+    mock_issue.title = "Test Issue"
+    mock_issue.body = ""
+    mock_issue.state = "open"
+    mock_label = MagicMock()
+    mock_label.name = "bug"
+    mock_issue.labels = [mock_label]
+    mock_issue.assignee = None
+    mock_issue.html_url = "https://github.com/test_owner/test_repo/issues/1"
+    mock_issue.created_at = MagicMock()
+    mock_issue.created_at.isoformat = lambda: "2024-01-01T00:00:00"
+    mock_issue.updated_at = MagicMock()
+    mock_issue.updated_at.isoformat = lambda: "2024-01-01T00:00:00"
+
+    mock_repository.get_issue.return_value = mock_issue
+    mock_repository.get_labels.return_value = []
+
+    github_backend.update("1", labels={"bug": ""})
+
+    mock_issue.set_labels.assert_called_once()
+
+
+def test_update_issue_assignee(github_backend: GitHubBackend, mock_repository: Mock) -> None:
+    """Test updating issue assignee."""
+    # Mock the issue
+    mock_issue = MagicMock()
+    mock_issue.number = 1
+    mock_issue.title = "Test Issue"
+    mock_issue.body = ""
+    mock_issue.state = "open"
+    mock_issue.labels = []
+    mock_assignee = MagicMock()
+    mock_assignee.login = "new_user"
+    mock_issue.assignee = mock_assignee
+    mock_issue.assignees = []
+    mock_issue.html_url = "https://github.com/test_owner/test_repo/issues/1"
+    mock_issue.created_at = MagicMock()
+    mock_issue.created_at.isoformat = lambda: "2024-01-01T00:00:00"
+    mock_issue.updated_at = MagicMock()
+    mock_issue.updated_at.isoformat = lambda: "2024-01-01T00:00:00"
+
+    mock_repository.get_issue.return_value = mock_issue
+
+    github_backend.update("1", assignee="new_user")
+
+    mock_issue.add_to_assignees.assert_called_once_with("new_user")
+
+
+def test_delete_issues(github_backend: GitHubBackend, mock_repository: Mock) -> None:
+    """Test deleting (closing) issues."""
+    # Mock the issue
+    mock_issue = MagicMock()
+    mock_issue.number = 1
+    mock_issue.title = "Test Issue"
+    mock_issue.body = ""
+    mock_issue.state = "closed"
+    mock_issue.labels = []
+    mock_issue.assignee = None
+    mock_issue.html_url = "https://github.com/test_owner/test_repo/issues/1"
+    mock_issue.created_at = MagicMock()
+    mock_issue.created_at.isoformat = lambda: "2024-01-01T00:00:00"
+    mock_issue.updated_at = MagicMock()
+    mock_issue.updated_at.isoformat = lambda: "2024-01-01T00:00:00"
+
+    mock_repository.get_issue.return_value = mock_issue
+
+    github_backend.delete(["1", "2"])
+
+    # Should have been called twice (once per issue)
+    assert mock_repository.get_issue.call_count >= 2
+
+
+def test_list_entities_all(github_backend: GitHubBackend, mock_repository: Mock) -> None:
+    """Test listing all issues."""
+    # Mock issues
+    mock_issue1 = MagicMock()
+    mock_issue1.number = 1
+    mock_issue1.title = "Issue 1"
+    mock_issue1.body = ""
+    mock_issue1.state = "open"
+    mock_issue1.labels = []
+    mock_issue1.assignee = None
+    mock_issue1.html_url = "https://github.com/test_owner/test_repo/issues/1"
+    mock_issue1.created_at = MagicMock()
+    mock_issue1.created_at.isoformat = lambda: "2024-01-01T00:00:00"
+    mock_issue1.updated_at = MagicMock()
+    mock_issue1.updated_at.isoformat = lambda: "2024-01-01T00:00:00"
+
+    mock_issue2 = MagicMock()
+    mock_issue2.number = 2
+    mock_issue2.title = "Issue 2"
+    mock_issue2.body = ""
+    mock_issue2.state = "closed"
+    mock_issue2.labels = []
+    mock_issue2.assignee = None
+    mock_issue2.html_url = "https://github.com/test_owner/test_repo/issues/2"
+    mock_issue2.created_at = MagicMock()
+    mock_issue2.created_at.isoformat = lambda: "2024-01-01T00:00:00"
+    mock_issue2.updated_at = MagicMock()
+    mock_issue2.updated_at.isoformat = lambda: "2024-01-01T00:00:00"
+
+    mock_repository.get_issues.return_value = [mock_issue1, mock_issue2]
+
+    entities = github_backend.list_entities()
+
+    assert len(entities) == 2
+    mock_repository.get_issues.assert_called_once()
+
+
+def test_list_entities_with_status_filter(github_backend: GitHubBackend, mock_repository: Mock) -> None:
+    """Test listing issues with status filter."""
+    # Mock issue
+    mock_issue = MagicMock()
+    mock_issue.number = 1
+    mock_issue.title = "Open Issue"
+    mock_issue.body = ""
+    mock_issue.state = "open"
+    mock_issue.labels = []
+    mock_issue.assignee = None
+    mock_issue.html_url = "https://github.com/test_owner/test_repo/issues/1"
+    mock_issue.created_at = MagicMock()
+    mock_issue.created_at.isoformat = lambda: "2024-01-01T00:00:00"
+    mock_issue.updated_at = MagicMock()
+    mock_issue.updated_at.isoformat = lambda: "2024-01-01T00:00:00"
+
+    mock_repository.get_issues.return_value = [mock_issue]
+
+    entities = github_backend.list_entities(filters={"status": "open"})
+
+    assert len(entities) == 1
+    assert entities[0].status == "open"
+
+
+def test_list_entities_with_limit(github_backend: GitHubBackend, mock_repository: Mock) -> None:
+    """Test listing issues with limit."""
+    # Mock multiple issues
+    issues = []
+    for i in range(10):
+        mock_issue = MagicMock()
+        mock_issue.number = i
+        mock_issue.title = f"Issue {i}"
+        mock_issue.body = ""
+        mock_issue.state = "open"
+        mock_issue.labels = []
+        mock_issue.assignee = None
+        mock_issue.html_url = f"https://github.com/test_owner/test_repo/issues/{i}"
+        mock_issue.created_at = MagicMock()
+        mock_issue.created_at.isoformat = lambda: "2024-01-01T00:00:00"
+        mock_issue.updated_at = MagicMock()
+        mock_issue.updated_at.isoformat = lambda: "2024-01-01T00:00:00"
+        issues.append(mock_issue)
+
+    mock_repository.get_issues.return_value = issues
+
+    entities = github_backend.list_entities(limit=5)
+
+    assert len(entities) == 5
+
+
+def test_get_link_tree(github_backend: GitHubBackend, mock_repository: Mock) -> None:
+    """Test getting link tree."""
+    # Mock the issue
+    mock_issue = MagicMock()
+    mock_issue.number = 1
+    mock_issue.title = "Test Issue"
+    mock_issue.state = "open"
+    mock_repository.get_issue.return_value = mock_issue
+
+    # Mock REST API responses
+    mock_requester = github_backend.client._Github__requester
+
+    def mock_api_call(method: str, url: str):
+        if "blocked_by" in url:
+            return ({}, [{"number": 2, "title": "Blocking Issue", "state": "open"}])
+        elif "blocking" in url:
+            return ({}, [{"number": 3, "title": "Blocked Issue", "state": "open"}])
+        elif "parent" in url:
+            return ({}, {"number": 4, "title": "Parent Issue", "state": "open"})
+        elif "sub_issues" in url:
+            return ({}, [{"number": 5, "title": "Child Issue", "state": "open"}])
+        return ({}, [])
+
+    mock_requester.requestJsonAndCheck.side_effect = mock_api_call
+
+    tree = github_backend.get_link_tree("1")
+
+    assert tree["entity"]["id"] == "1"
+    assert len(tree["links"]["blocked_by"]) == 1
+    assert len(tree["links"]["blocking"]) == 1
+    assert len(tree["links"]["parent"]) == 1
+    assert len(tree["links"]["children"]) == 1
+
+
+def test_find_cycles(github_backend: GitHubBackend) -> None:
+    """Test finding cycles (not implemented, returns empty list)."""
+    cycles = github_backend.find_cycles()
+    assert cycles == []
