@@ -12,10 +12,8 @@ class Backend(ABC):
     @abstractmethod
     def create(
         self,
-        title: str,
-        description: str = "",
-        labels: dict[str, str] | None = None,
-        assignee: str | None = None,
+        type: str = "default",
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Create a new entity."""
         pass
@@ -29,11 +27,8 @@ class Backend(ABC):
     def update(
         self,
         entity_id: str,
-        title: str | None = None,
-        description: str | None = None,
-        labels: dict[str, str] | None = None,
-        status: str | None = None,
-        assignee: str | None = None,
+        type: str | None = None,
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Update an entity."""
         pass

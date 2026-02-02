@@ -80,24 +80,31 @@ class BeadsBackend(Backend):
         """
         logger.debug("Converting bead to entity", bead_id=bead.get("id"))
 
-        # Parse labels - beads uses a list of strings
-        labels = {}
+        # Build properties dict from beads issue fields
+        properties: dict[str, Any] = {
+            "title": bead.get("title", ""),
+            "description": bead.get("description", ""),
+            "status": bead.get("status", "open"),
+        }
+
+        # Parse labels and merge into properties
         for label in bead.get("labels", []):
             if ":" in label:
                 key, value = label.split(":", 1)
-                labels[key] = value
+                properties[key] = value
             else:
-                labels[label] = ""
+                properties[label] = ""
+
+        # Add assignee if present
+        if bead.get("assignee"):
+            properties["assignee"] = bead.get("assignee")
 
         entity = Entity(
             id=str(bead["id"]),  # Using the hash ID directly (bd-a1b2 format), converted to str
-            title=bead.get("title", ""),
-            description=bead.get("description", ""),
-            labels=labels,
-            assignee=bead.get("assignee"),
-            status=bead.get("status", "open"),
+            type="bead",
+            properties=properties,
             metadata={
-                "type": bead.get("type"),
+                "bead_type": bead.get("type"),
                 "priority": bead.get("priority"),
                 "created_at": bead.get("created_at"),
                 "updated_at": bead.get("updated_at"),
@@ -106,7 +113,7 @@ class BeadsBackend(Backend):
                 "acceptance_criteria": bead.get("acceptance_criteria"),
             },
         )
-        logger.debug("Converted bead to entity", entity_id=entity.id, title=entity.title)
+        logger.debug("Converted bead to entity", entity_id=entity.id)
         return entity
 
     def _entity_id_to_bead_id(self, entity_id: str) -> str:
@@ -127,18 +134,24 @@ class BeadsBackend(Backend):
 
     def create(
         self,
-        title: str,
-        description: str = "",
-        labels: dict[str, str] | None = None,
-        assignee: str | None = None,
+        type: str = "default",
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Create a new beads issue."""
+        properties = properties or {}
+        title = properties.get("title", "")
+        description = properties.get("description", "")
+        assignee = properties.get("assignee")
+
         logger.info("Creating beads issue", title=title, assignee=assignee)
 
         args = ["create", title, "--json"]
 
         if description:
             args.extend(["-d", description])
+
+        # Extract labels from properties (excluding standard fields)
+        labels = {k: v for k, v in properties.items() if k not in ("title", "description", "assignee", "status")}
 
         # Labels in beads are strings, formatted as key:value or just key
         if labels:
@@ -171,13 +184,16 @@ class BeadsBackend(Backend):
     def update(
         self,
         entity_id: str,
-        title: str | None = None,
-        description: str | None = None,
-        labels: dict[str, str] | None = None,
-        status: str | None = None,
-        assignee: str | None = None,
+        type: str | None = None,
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Update a beads issue."""
+        properties = properties or {}
+        title = properties.get("title")
+        description = properties.get("description")
+        status = properties.get("status")
+        assignee = properties.get("assignee")
+
         bead_id = self._entity_id_to_bead_id(entity_id)
         logger.info("Updating beads issue", entity_id=bead_id, title=title, status=status, assignee=assignee)
 
@@ -192,15 +208,20 @@ class BeadsBackend(Backend):
         if assignee:
             args.extend(["--assignee", assignee])
 
+        # Extract labels from properties (excluding standard fields)
+        labels = {k: v for k, v in properties.items() if k not in ("title", "description", "assignee", "status")}
+
         # Update labels separately using label commands
         if labels is not None:
             # First, get current issue to see existing labels
             current = self.read(entity_id)
 
             # Remove old labels
-            for old_label in current.labels:
-                old_label_str = f"{old_label}:{current.labels[old_label]}" if current.labels[old_label] else old_label
-                self._run_bd_command(["label", "remove", bead_id, old_label_str])
+            for old_label in current.properties:
+                if old_label not in ("title", "description", "status", "assignee"):
+                    old_value = current.properties[old_label]
+                    old_label_str = f"{old_label}:{old_value}" if old_value else old_label
+                    self._run_bd_command(["label", "remove", bead_id, old_label_str])
 
             # Add new labels
             for key, value in labels.items():
@@ -354,8 +375,8 @@ class BeadsBackend(Backend):
         tree: dict[str, Any] = {
             "entity": {
                 "id": issue.id,
-                "title": issue.title,
-                "state": issue.status,
+                "title": issue.properties.get("title", ""),
+                "state": issue.properties.get("status", ""),
             },
             "links": {
                 "children": [],

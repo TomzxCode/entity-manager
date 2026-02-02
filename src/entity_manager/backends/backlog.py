@@ -147,8 +147,20 @@ class BacklogBackend(Backend):
         # Map status
         status = self._map_status_to_entity(backlog_status)
 
-        # Parse labels
+        # Build properties dict
+        properties: dict[str, Any] = {
+            "title": title,
+            "description": description,
+            "status": status,
+        }
+
+        # Add assignee if present
+        if assignee:
+            properties["assignee"] = assignee
+
+        # Parse labels and merge into properties
         labels = self._parse_labels(labels_list)
+        properties.update(labels)
 
         # Build metadata
         metadata = {
@@ -163,11 +175,8 @@ class BacklogBackend(Backend):
 
         entity = Entity(
             id=entity_id,
-            title=title,
-            description=description,
-            labels=labels,
-            assignee=assignee,
-            status=status,
+            type="backlog_task",
+            properties=properties,
             metadata=metadata,
         )
 
@@ -242,19 +251,29 @@ class BacklogBackend(Backend):
             entity: Entity to write
             file_path: Path to write the file
         """
+        # Extract fields from properties
+        title = entity.properties.get("title", "")
+        description = entity.properties.get("description", "")
+        status = entity.properties.get("status", "open")
+        assignee = entity.properties.get("assignee")
+
         # Build frontmatter
         frontmatter: dict[str, Any] = {
             "id": entity.id,
-            "title": entity.title,
-            "description": entity.description,
-            "status": self._map_status_to_backlog(entity.status),
+            "title": title,
+            "description": description,
+            "status": self._map_status_to_backlog(status),
         }
 
+        # Extract labels from properties (excluding standard fields)
+        standard_fields = {"title", "description", "status", "assignee"}
+        labels = {k: v for k, v in entity.properties.items() if k not in standard_fields}
+
         # Add optional fields
-        if entity.labels:
-            frontmatter["labels"] = self._format_labels(entity.labels)
-        if entity.assignee:
-            frontmatter["assignee"] = entity.assignee
+        if labels:
+            frontmatter["labels"] = self._format_labels(labels)
+        if assignee:
+            frontmatter["assignee"] = assignee
 
         # Add metadata fields
         if entity.metadata.get("priority"):
@@ -288,26 +307,41 @@ class BacklogBackend(Backend):
 
     def create(
         self,
-        title: str,
-        description: str = "",
-        labels: dict[str, str] | None = None,
-        assignee: str | None = None,
+        type: str = "default",
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Create a new Backlog.md task."""
+        properties = properties or {}
+        title = properties.get("title", "")
+        assignee = properties.get("assignee")
+
         logger.info("Creating Backlog.md task", title=title, assignee=assignee)
 
         # Generate new ID
         entity_id = self._get_next_id()
         logger.debug("Generated new task ID", entity_id=entity_id)
 
+        # Build properties with defaults
+        entity_properties: dict[str, Any] = {
+            "title": title,
+            "description": properties.get("description", ""),
+            "status": "open",
+        }
+
+        # Add assignee if provided
+        if assignee:
+            entity_properties["assignee"] = assignee
+
+        # Merge other properties
+        for key, value in properties.items():
+            if key not in ("title", "description", "assignee"):
+                entity_properties[key] = value
+
         # Create entity
         entity = Entity(
             id=entity_id,
-            title=title,
-            description=description,
-            labels=labels or {},
-            assignee=assignee,
-            status="open",
+            type="backlog_task",
+            properties=entity_properties,
             metadata={"created": datetime.now(tz=None).strftime("%Y-%m-%d %H:%M")},
         )
 
@@ -339,13 +373,14 @@ class BacklogBackend(Backend):
     def update(
         self,
         entity_id: str,
-        title: str | None = None,
-        description: str | None = None,
-        labels: dict[str, str] | None = None,
-        status: str | None = None,
-        assignee: str | None = None,
+        type: str | None = None,
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Update a Backlog.md task."""
+        properties = properties or {}
+        title = properties.get("title")
+        status = properties.get("status")
+
         # Normalize ID
         if not entity_id.startswith("task-"):
             entity_id = f"task-{entity_id}"
@@ -356,21 +391,19 @@ class BacklogBackend(Backend):
         file_path = self._get_task_file_path(entity_id)
         entity = self._file_to_entity(file_path)
 
-        # Update fields
-        if title is not None:
-            entity.title = title
-        if description is not None:
-            entity.description = description
-        if labels is not None:
-            entity.labels = labels
-        if status is not None:
-            entity.status = status
-        if assignee is not None:
-            entity.assignee = assignee
+        # Update type if provided
+        if type is not None:
+            entity.type = type
+
+        # Update properties
+        for key, value in properties.items():
+            if value is not None:
+                entity.properties[key] = value
 
         # Write updated file
         # If title changed, we need to rename the file
-        new_filename = self._generate_filename(entity_id, entity.title)
+        new_title = entity.properties.get("title", "")
+        new_filename = self._generate_filename(entity_id, new_title)
         new_file_path = self.tasks_dir / new_filename
 
         self._write_task_file(entity, new_file_path)
@@ -427,10 +460,10 @@ class BacklogBackend(Backend):
                 if "status" in filters:
                     # Map filter status to entity status
                     filter_status = self._map_status_to_entity(filters["status"])
-                    if entity.status != filter_status:
+                    if entity.properties.get("status") != filter_status:
                         match = False
                 if "assignee" in filters:
-                    if entity.assignee != filters["assignee"]:
+                    if entity.properties.get("assignee") != filters["assignee"]:
                         match = False
                 if match:
                     filtered.append(entity)
@@ -599,8 +632,8 @@ class BacklogBackend(Backend):
                 blocked_by.append(
                     {
                         "id": target_entity.id,
-                        "title": target_entity.title,
-                        "state": target_entity.status,
+                        "title": target_entity.properties.get("title", ""),
+                        "state": target_entity.properties.get("status", ""),
                     }
                 )
             except ValueError:
@@ -611,8 +644,8 @@ class BacklogBackend(Backend):
         tree: dict[str, Any] = {
             "entity": {
                 "id": entity.id,
-                "title": entity.title,
-                "state": entity.status,
+                "title": entity.properties.get("title", ""),
+                "state": entity.properties.get("status", ""),
             },
             "links": {
                 "children": [],

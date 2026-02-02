@@ -77,6 +77,7 @@ class MarkdownBackend(Backend):
         File format:
         ---
         id: md-123-0001
+        type: default
         title: Entity Title
         status: open
         assignee: username
@@ -114,22 +115,35 @@ class MarkdownBackend(Backend):
                 return None
 
             entity_id = frontmatter.get("id")
+            entity_type = frontmatter.get("type", "default")
             title = frontmatter.get("title")
-            status = frontmatter.get("status", "open")
-            assignee = frontmatter.get("assignee")
-            labels = frontmatter.get("labels", {})
 
             if not entity_id or not title:
                 logger.warning("Missing required fields in entity file", file_path=str(file_path))
                 return None
 
+            # Build properties dict from frontmatter
+            properties: dict[str, Any] = {
+                "title": str(title),
+                "description": description,
+                "status": frontmatter.get("status", "open"),
+            }
+
+            # Add assignee if present
+            assignee = frontmatter.get("assignee")
+            if assignee:
+                properties["assignee"] = assignee
+
+            # Merge labels into properties
+            labels = frontmatter.get("labels", {})
+            if isinstance(labels, dict):
+                properties.update(labels)
+
             entity = Entity(
                 id=str(entity_id),
-                title=str(title),
-                description=description,
-                labels=labels if isinstance(labels, dict) else {},
-                assignee=assignee if assignee else None,
-                status=str(status),
+                type=entity_type,
+                properties=properties,
+                metadata={"file_path": str(file_path)},
             )
             logger.debug("Parsed entity successfully", entity_id=entity.id)
             return entity
@@ -149,22 +163,33 @@ class MarkdownBackend(Backend):
         # Build YAML frontmatter
         frontmatter = {
             "id": entity.id,
-            "title": entity.title,
-            "status": entity.status,
+            "type": entity.type,
         }
 
-        if entity.description:
-            frontmatter["description"] = entity.description
+        # Extract standard fields from properties
+        title = entity.properties.get("title", "")
+        description = entity.properties.get("description", "")
+        status = entity.properties.get("status", "open")
+        assignee = entity.properties.get("assignee")
 
-        if entity.labels:
-            frontmatter["labels"] = entity.labels
+        if title:
+            frontmatter["title"] = title
+        if description:
+            frontmatter["description"] = description
+        if status:
+            frontmatter["status"] = status
+        if assignee:
+            frontmatter["assignee"] = assignee
 
-        if entity.assignee:
-            frontmatter["assignee"] = entity.assignee
+        # Extract labels (properties that aren't standard fields)
+        standard_fields = {"title", "description", "status", "assignee"}
+        labels = {k: v for k, v in entity.properties.items() if k not in standard_fields}
+        if labels:
+            frontmatter["labels"] = labels
 
         # Write file with YAML frontmatter
         frontmatter_text = yaml.dump(frontmatter, default_flow_style=False, sort_keys=False)
-        content = f"---\n{frontmatter_text}---\n{entity.description}\n"
+        content = f"---\n{frontmatter_text}---\n{description}\n"
 
         file_path.write_text(content)
         logger.debug("Wrote entity file", entity_id=entity.id, file_path=str(file_path))
@@ -201,23 +226,39 @@ class MarkdownBackend(Backend):
 
     def create(
         self,
-        title: str,
-        description: str = "",
-        labels: dict[str, str] | None = None,
-        assignee: str | None = None,
+        type: str = "default",
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Create a new entity as a markdown file."""
+        properties = properties or {}
+        title = properties.get("title", "")
+        assignee = properties.get("assignee")
+
         logger.info("Creating markdown entity", title=title, assignee=assignee)
 
         entity_id = self._generate_entity_id()
 
+        # Build properties with defaults
+        entity_properties: dict[str, Any] = {
+            "title": title,
+            "description": properties.get("description", ""),
+            "status": "open",
+        }
+
+        # Add assignee if provided
+        if assignee:
+            entity_properties["assignee"] = assignee
+
+        # Merge other properties
+        for key, value in properties.items():
+            if key not in ("title", "description", "assignee"):
+                entity_properties[key] = value
+
         entity = Entity(
             id=entity_id,
-            title=title,
-            description=description,
-            labels=labels or {},
-            assignee=assignee,
-            status="open",
+            type=type,
+            properties=entity_properties,
+            metadata={"file_path": str(self._get_entity_path(entity_id))},
         )
 
         self._write_entity_file(entity)
@@ -242,27 +283,26 @@ class MarkdownBackend(Backend):
     def update(
         self,
         entity_id: str,
-        title: str | None = None,
-        description: str | None = None,
-        labels: dict[str, str] | None = None,
-        status: str | None = None,
-        assignee: str | None = None,
+        type: str | None = None,
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Update an entity in the markdown file."""
+        properties = properties or {}
+        title = properties.get("title")
+        status = properties.get("status")
+
         logger.info("Updating markdown entity", entity_id=entity_id, title=title, status=status)
 
         entity = self.read(entity_id)
 
-        if title is not None:
-            entity.title = title
-        if description is not None:
-            entity.description = description
-        if labels is not None:
-            entity.labels = labels
-        if status is not None:
-            entity.status = status
-        if assignee is not None:
-            entity.assignee = assignee
+        # Update type if provided
+        if type is not None:
+            entity.type = type
+
+        # Update properties
+        for key, value in properties.items():
+            if value is not None:
+                entity.properties[key] = value
 
         self._write_entity_file(entity)
         logger.info("Markdown entity updated successfully", entity_id=entity_id)
@@ -334,9 +374,9 @@ class MarkdownBackend(Backend):
         # Apply filters
         if filters:
             if "status" in filters:
-                entities = [e for e in entities if e.status == filters["status"]]
+                entities = [e for e in entities if e.properties.get("status") == filters["status"]]
             if "assignee" in filters:
-                entities = [e for e in entities if e.assignee == filters["assignee"]]
+                entities = [e for e in entities if e.properties.get("assignee") == filters["assignee"]]
 
         # Apply sorting
         if sort_by:
@@ -344,11 +384,11 @@ class MarkdownBackend(Backend):
             sort_key = sort_by.lstrip("-")
 
             if sort_key == "title":
-                entities.sort(key=lambda e: e.title.lower(), reverse=reverse)
+                entities.sort(key=lambda e: str(e.properties.get("title", "")).lower(), reverse=reverse)
             elif sort_key == "status":
-                entities.sort(key=lambda e: e.status, reverse=reverse)
+                entities.sort(key=lambda e: e.properties.get("status", ""), reverse=reverse)
             elif sort_key == "assignee":
-                entities.sort(key=lambda e: e.assignee or "", reverse=reverse)
+                entities.sort(key=lambda e: e.properties.get("assignee") or "", reverse=reverse)
 
         # Apply limit
         if limit:
@@ -505,8 +545,8 @@ class MarkdownBackend(Backend):
         tree: dict[str, Any] = {
             "entity": {
                 "id": entity.id,
-                "title": entity.title,
-                "state": entity.status,
+                "title": entity.properties.get("title", ""),
+                "state": entity.properties.get("status", ""),
             },
             "links": defaultdict(list),
         }
@@ -515,7 +555,11 @@ class MarkdownBackend(Backend):
         def get_entity_info(eid: str) -> dict[str, str] | None:
             try:
                 e = self.read(eid)
-                return {"id": e.id, "title": e.title, "state": e.status}
+                return {
+                    "id": e.id,
+                    "title": e.properties.get("title", ""),
+                    "state": e.properties.get("status", ""),
+                }
             except ValueError:
                 return None
 

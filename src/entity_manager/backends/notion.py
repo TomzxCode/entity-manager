@@ -69,94 +69,100 @@ class NotionBackend(Backend):
         """Convert Notion page to Entity."""
         logger.debug("Converting Notion page to entity", page_id=page["id"])
 
-        properties = self._parse_properties(page.get("properties", {}))
+        parsed_properties = self._parse_properties(page.get("properties", {}))
 
-        # Extract common fields
-        title = properties.get("Name") or properties.get("Title") or ""
-        description = properties.get("Description") or ""
-        status = properties.get("Status") or "open"
+        # Build properties dict from Notion page fields
+        status_value = parsed_properties.get("Status") or "open"
+        status_str = status_value.lower() if isinstance(status_value, str) else "open"
 
-        # Extract labels from multi-select property
-        labels = {}
-        multi_select_labels = properties.get("Labels") or properties.get("Tags") or []
+        properties: dict[str, Any] = {
+            "title": parsed_properties.get("Name") or parsed_properties.get("Title") or "",
+            "description": parsed_properties.get("Description") or "",
+            "status": status_str,
+        }
+
+        # Extract labels from multi-select property and merge into properties
+        multi_select_labels = parsed_properties.get("Labels") or parsed_properties.get("Tags") or []
         if isinstance(multi_select_labels, list):
             for label in multi_select_labels:
                 if isinstance(label, str):
                     if ":" in label:
                         key, value = label.split(":", 1)
-                        labels[key.strip()] = value.strip()
+                        properties[key.strip()] = value.strip()
                     else:
-                        labels[label] = ""
+                        properties[label] = ""
 
-        # Extract assignee
-        assignee = None
-        people = properties.get("Assignee") or []
+        # Extract assignee if present
+        people = parsed_properties.get("Assignee") or []
         if isinstance(people, list) and len(people) > 0:
-            assignee = people[0]
+            properties["assignee"] = people[0]
 
         entity = Entity(
             id=page["id"],
-            title=title,
-            description=description,
-            labels=labels,
-            assignee=assignee,
-            status=status.lower() if isinstance(status, str) else "open",
+            type="notion_page",
+            properties=properties,
             metadata={
                 "url": page.get("url"),
                 "created_time": page.get("created_time"),
                 "last_edited_time": page.get("last_edited_time"),
-                "properties": properties,
+                "notion_properties": parsed_properties,
             },
         )
-        logger.debug("Converted Notion page to entity", entity_id=entity.id, title=entity.title)
+        logger.debug("Converted Notion page to entity", entity_id=entity.id)
         return entity
 
-    def _build_properties(
+    def _build_notion_properties(
         self,
-        title: str | None = None,
-        description: str | None = None,
-        labels: dict[str, str] | None = None,
-        status: str | None = None,
-        assignee: str | None = None,
+        properties: dict[str, Any],
     ) -> dict[str, Any]:
-        """Build Notion properties object."""
-        properties: dict[str, Any] = {}
+        """Build Notion properties object from entity properties."""
+        notion_properties: dict[str, Any] = {}
 
+        title = properties.get("title")
         if title is not None:
-            properties["Name"] = {"title": [{"text": {"content": title}}]}
+            notion_properties["Name"] = {"title": [{"text": {"content": title}}]}
 
+        description = properties.get("description")
         if description is not None:
-            properties["Description"] = {"rich_text": [{"text": {"content": description}}]}
+            notion_properties["Description"] = {"rich_text": [{"text": {"content": description}}]}
 
+        status = properties.get("status")
         if status is not None:
-            properties["Status"] = {"status": {"name": status.title()}}
+            notion_properties["Status"] = {"status": {"name": status.title()}}
 
-        if labels is not None:
+        # Extract labels from properties (excluding standard fields)
+        labels = {k: v for k, v in properties.items() if k not in ("title", "description", "status", "assignee")}
+        if labels:
             label_names = [f"{k}:{v}" if v else k for k, v in labels.items()]
-            properties["Labels"] = {"multi_select": [{"name": name} for name in label_names]}
+            notion_properties["Labels"] = {"multi_select": [{"name": name} for name in label_names]}
 
+        assignee = properties.get("assignee")
         if assignee is not None:
             # Note: In Notion, people properties require user IDs, not names
             # This is a simplified implementation - in production you'd need to resolve names to IDs
-            properties["Assignee"] = {"people": [{"id": assignee}]} if assignee else {"people": []}
+            notion_properties["Assignee"] = {"people": [{"id": assignee}]} if assignee else {"people": []}
 
-        return properties
+        return notion_properties
 
     def create(
         self,
-        title: str,
-        description: str = "",
-        labels: dict[str, str] | None = None,
-        assignee: str | None = None,
+        type: str = "default",
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Create a new Notion page in the database."""
+        properties = properties or {}
+        title = properties.get("title", "")
+        assignee = properties.get("assignee")
+
         logger.info("Creating Notion page", title=title, assignee=assignee)
 
-        properties = self._build_properties(
-            title=title, description=description, labels=labels, status="open", assignee=assignee
-        )
+        # Ensure status is set
+        if "status" not in properties:
+            properties = {**properties, "status": "open"}
 
-        response = self.client.pages.create(parent={"database_id": self.database_id}, properties=properties)
+        notion_properties = self._build_notion_properties(properties)
+
+        response = self.client.pages.create(parent={"database_id": self.database_id}, properties=notion_properties)
 
         entity = self._page_to_entity(response)
         logger.info("Notion page created", entity_id=entity.id)
@@ -173,20 +179,20 @@ class NotionBackend(Backend):
     def update(
         self,
         entity_id: str,
-        title: str | None = None,
-        description: str | None = None,
-        labels: dict[str, str] | None = None,
-        status: str | None = None,
-        assignee: str | None = None,
+        type: str | None = None,
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Update a Notion page."""
+        properties = properties or {}
+        title = properties.get("title")
+        status = properties.get("status")
+        assignee = properties.get("assignee")
+
         logger.info("Updating Notion page", entity_id=entity_id, title=title, status=status, assignee=assignee)
 
-        properties = self._build_properties(
-            title=title, description=description, labels=labels, status=status, assignee=assignee
-        )
+        notion_properties = self._build_notion_properties(properties)
 
-        self.client.pages.update(page_id=entity_id, properties=properties)
+        self.client.pages.update(page_id=entity_id, properties=notion_properties)
 
         # Retrieve updated page
         entity = self.read(entity_id)
@@ -411,7 +417,11 @@ class NotionBackend(Backend):
 
         # Build tree structure
         tree: dict[str, Any] = {
-            "entity": {"id": entity.id, "title": entity.title, "state": entity.status},
+            "entity": {
+                "id": entity.id,
+                "title": entity.properties.get("title", ""),
+                "state": entity.properties.get("status", ""),
+            },
             "links": {"children": [], "blocking": [], "blocked_by": [], "parent": []},
         }
 
@@ -422,7 +432,11 @@ class NotionBackend(Backend):
         for link in links:
             try:
                 linked_entity = self.read(link.target_id)
-                link_info = {"id": linked_entity.id, "title": linked_entity.title, "state": linked_entity.status}
+                link_info = {
+                    "id": linked_entity.id,
+                    "title": linked_entity.properties.get("title", ""),
+                    "state": linked_entity.properties.get("status", ""),
+                }
 
                 if link.link_type == "blocked by":
                     tree["links"]["blocked_by"].append(link_info)

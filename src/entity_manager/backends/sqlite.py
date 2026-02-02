@@ -33,15 +33,12 @@ class SQLiteBackend(Backend):
         """Initialize database schema."""
         cursor = self._conn.cursor()
 
-        # Entities table
+        # Entities table - new schema with type and properties
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS entities (
                 id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                description TEXT,
-                labels TEXT,
-                assignee TEXT,
-                status TEXT DEFAULT 'open',
+                type TEXT DEFAULT 'default',
+                properties TEXT,
                 metadata TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -63,13 +60,8 @@ class SQLiteBackend(Backend):
 
         # Create indexes for better query performance
         cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_entities_status
-            ON entities(status)
-        """)
-
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_entities_assignee
-            ON entities(assignee)
+            CREATE INDEX IF NOT EXISTS idx_entities_type
+            ON entities(type)
         """)
 
         cursor.execute("""
@@ -89,30 +81,25 @@ class SQLiteBackend(Backend):
         Returns:
             Entity object
         """
-        labels = {}
-        if row["labels"]:
-            labels = json.loads(row["labels"])
+        properties = {}
+        if row.get("properties"):
+            properties = json.loads(row["properties"])
 
         metadata = {}
-        if row["metadata"]:
+        if row.get("metadata"):
             metadata = json.loads(row["metadata"])
 
         return Entity(
             id=row["id"],
-            title=row["title"],
-            description=row["description"] or "",
-            labels=labels,
-            assignee=row["assignee"],
-            status=row["status"] or "open",
+            type=row.get("type", "default"),
+            properties=properties,
             metadata=metadata,
         )
 
     def create(
         self,
-        title: str,
-        description: str = "",
-        labels: dict[str, str] | None = None,
-        assignee: str | None = None,
+        type: str = "default",
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Create a new entity."""
         import uuid
@@ -120,20 +107,20 @@ class SQLiteBackend(Backend):
         cursor = self._conn.cursor()
 
         entity_id = f"sql-{uuid.uuid4().hex[:8]}"
-        labels_json = json.dumps(labels) if labels else None
+        properties_json = json.dumps(properties) if properties else None
         metadata_json = json.dumps({"backend": "sqlite"})
 
         try:
             cursor.execute(
                 """
-                INSERT INTO entities (id, title, description, labels, assignee, metadata)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO entities (id, type, properties, metadata)
+                VALUES (?, ?, ?, ?)
                 """,
-                (entity_id, title, description, labels_json, assignee, metadata_json),
+                (entity_id, type, properties_json, metadata_json),
             )
             self._conn.commit()
 
-            logger.info("Entity created", entity_id=entity_id, title=title)
+            logger.info("Entity created", entity_id=entity_id, type=type)
             return self.read(entity_id)
         except sqlite3.IntegrityError:
             logger.error("Failed to create entity", entity_id=entity_id, error="Duplicate ID")
@@ -155,11 +142,8 @@ class SQLiteBackend(Backend):
     def update(
         self,
         entity_id: str,
-        title: str | None = None,
-        description: str | None = None,
-        labels: dict[str, str] | None = None,
-        status: str | None = None,
-        assignee: str | None = None,
+        type: str | None = None,
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Update an entity."""
         cursor = self._conn.cursor()
@@ -174,25 +158,13 @@ class SQLiteBackend(Backend):
         updates = []
         params = []
 
-        if title is not None:
-            updates.append("title = ?")
-            params.append(title)
+        if type is not None:
+            updates.append("type = ?")
+            params.append(type)
 
-        if description is not None:
-            updates.append("description = ?")
-            params.append(description)
-
-        if labels is not None:
-            updates.append("labels = ?")
-            params.append(json.dumps(labels))
-
-        if status is not None:
-            updates.append("status = ?")
-            params.append(status)
-
-        if assignee is not None:
-            updates.append("assignee = ?")
-            params.append(assignee)
+        if properties is not None:
+            updates.append("properties = ?")
+            params.append(json.dumps(properties))
 
         if updates:
             updates.append("updated_at = CURRENT_TIMESTAMP")
@@ -235,23 +207,17 @@ class SQLiteBackend(Backend):
 
         if filters:
             for key, value in filters.items():
-                if key == "status":
-                    query += " AND status = ?"
+                if key == "type":
+                    query += " AND type = ?"
                     params.append(value)
-                elif key == "assignee":
-                    query += " AND assignee = ?"
-                    params.append(value)
-                elif key == "title":
-                    query += " AND title LIKE ?"
-                    params.append(f"%{value}%")
                 else:
-                    # Filter by label (JSON contains)
-                    query += " AND labels LIKE ?"
+                    # Filter by property (JSON contains)
+                    query += " AND properties LIKE ?"
                     params.append(f"%{key}%{value}%")
 
         if sort_by:
             # Validate sort_by to prevent SQL injection
-            allowed_columns = {"id", "title", "status", "assignee", "created_at", "updated_at"}
+            allowed_columns = {"id", "type", "created_at", "updated_at"}
             if sort_by in allowed_columns:
                 query += f" ORDER BY {sort_by}"
             else:
@@ -361,7 +327,9 @@ class SQLiteBackend(Backend):
         cursor.execute("SELECT target_id, link_type FROM links WHERE source_id = ?", (entity_id,))
         for row in cursor.fetchall():
             target = self.read(row["target_id"])
-            link_info = {"id": target.id, "title": target.title, "state": target.status}
+            title = target.properties.get("title", "")
+            state = target.properties.get("status", "open")
+            link_info = {"id": target.id, "title": title, "state": state}
 
             # Map link types to standard categories
             if row["link_type"] in ("child", "children"):
@@ -378,10 +346,15 @@ class SQLiteBackend(Backend):
         )
         for row in cursor.fetchall():
             source = self.read(row["source_id"])
-            links["blocked_by"].append({"id": source.id, "title": source.title, "state": source.status})
+            title = source.properties.get("title", "")
+            state = source.properties.get("status", "open")
+            links["blocked_by"].append({"id": source.id, "title": title, "state": state})
+
+        title = entity.properties.get("title", "")
+        state = entity.properties.get("status", "open")
 
         return {
-            "entity": {"id": entity.id, "title": entity.title, "state": entity.status},
+            "entity": {"id": entity.id, "title": title, "state": state},
             "links": links,
         }
 

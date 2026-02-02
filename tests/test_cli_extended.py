@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from entity_manager.cli import configure_logging, create, get_backend, list, read, update
+from entity_manager.cli import configure_logging, create, get_backend, list_entities, read, update
 from entity_manager.config import Config
 from entity_manager.models import Entity
 
@@ -294,7 +294,7 @@ def test_update_entity_all_fields(mock_backend):
 def test_list_entities(mock_backend, capsys):
     """Test listing entities."""
     with patch("entity_manager.cli.get_backend", return_value=mock_backend):
-        list()
+        list_entities()
 
     mock_backend.list_entities.assert_called_once_with(filters=None, sort_by=None, limit=None)
     captured = capsys.readouterr()
@@ -306,7 +306,7 @@ def test_list_entities(mock_backend, capsys):
 def test_list_entities_with_filter(mock_backend):
     """Test listing entities with filter."""
     with patch("entity_manager.cli.get_backend", return_value=mock_backend):
-        list(filter="status=open,assignee=user1")
+        list_entities(filter="status=open,assignee=user1")
 
     call_args = mock_backend.list_entities.call_args
     assert call_args[1]["filters"] == {"status": "open", "assignee": "user1"}
@@ -315,7 +315,7 @@ def test_list_entities_with_filter(mock_backend):
 def test_list_entities_with_sort(mock_backend):
     """Test listing entities with sort."""
     with patch("entity_manager.cli.get_backend", return_value=mock_backend):
-        list(sort="title")
+        list_entities(sort="title")
 
     call_args = mock_backend.list_entities.call_args
     assert call_args[1]["sort_by"] == "title"
@@ -324,7 +324,7 @@ def test_list_entities_with_sort(mock_backend):
 def test_list_entities_with_limit(mock_backend):
     """Test listing entities with limit."""
     with patch("entity_manager.cli.get_backend", return_value=mock_backend):
-        list(limit=10)
+        list_entities(limit=10)
 
     call_args = mock_backend.list_entities.call_args
     assert call_args[1]["limit"] == 10
@@ -337,7 +337,7 @@ def test_list_entities_no_labels(mock_backend, capsys):
     ]
 
     with patch("entity_manager.cli.get_backend", return_value=mock_backend):
-        list()
+        list_entities()
 
     captured = capsys.readouterr()
     assert "● 1: Task 1\n" in captured.out

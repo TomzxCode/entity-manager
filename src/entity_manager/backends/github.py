@@ -63,42 +63,55 @@ class GitHubBackend(Backend):
     def _issue_to_entity(self, issue: Issue) -> Entity:
         """Convert GitHub issue to Entity."""
         logger.debug("Converting GitHub issue to entity", issue_number=issue.number)
-        labels = {}
+
+        # Build properties dict from GitHub issue fields
+        properties: dict[str, Any] = {
+            "title": issue.title,
+            "description": issue.body or "",
+            "status": issue.state.lower(),
+        }
+
+        # Parse labels into properties
         for label in issue.labels:
             name = label.name
             if ":" in name:
                 key, value = name.split(":", 1)
-                labels[key] = value
+                properties[key] = value
             else:
-                labels[name] = ""
+                properties[name] = ""
 
-        assignee = issue.assignee.login if issue.assignee else None
+        # Add assignee if present
+        if issue.assignee:
+            properties["assignee"] = issue.assignee.login
 
         entity = Entity(
             id=str(issue.number),
-            title=issue.title,
-            description=issue.body or "",
-            labels=labels,
-            assignee=assignee,
-            status=issue.state.lower(),
+            type="issue",
+            properties=properties,
             metadata={
                 "url": issue.html_url,
                 "created_at": issue.created_at.isoformat(),
                 "updated_at": issue.updated_at.isoformat(),
             },
         )
-        logger.debug("Converted issue to entity", entity_id=entity.id, title=entity.title)
+        logger.debug("Converted issue to entity", entity_id=entity.id)
         return entity
 
     def create(
         self,
-        title: str,
-        description: str = "",
-        labels: dict[str, str] | None = None,
-        assignee: str | None = None,
+        type: str = "default",
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Create a new GitHub issue."""
+        properties = properties or {}
+        title = properties.get("title", "")
+        description = properties.get("description", "")
+        assignee = properties.get("assignee")
+
         logger.info("Creating GitHub issue", title=title, assignee=assignee)
+
+        # Extract labels from properties (excluding standard fields)
+        labels = {k: v for k, v in properties.items() if k not in ("title", "description", "assignee", "status")}
 
         label_names = []
         if labels:
@@ -130,13 +143,16 @@ class GitHubBackend(Backend):
     def update(
         self,
         entity_id: str,
-        title: str | None = None,
-        description: str | None = None,
-        labels: dict[str, str] | None = None,
-        status: str | None = None,
-        assignee: str | None = None,
+        type: str | None = None,
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Update a GitHub issue."""
+        properties = properties or {}
+        title = properties.get("title")
+        description = properties.get("description")
+        status = properties.get("status")
+        assignee = properties.get("assignee")
+
         logger.info("Updating GitHub issue", entity_id=entity_id, title=title, status=status, assignee=assignee)
         issue = self.repository.get_issue(number=int(entity_id))
 
@@ -155,8 +171,9 @@ class GitHubBackend(Backend):
             elif status == "closed":
                 issue.edit(state="closed")
 
-        # Update labels
-        if labels is not None:
+        # Extract labels from properties (excluding standard fields)
+        labels = {k: v for k, v in properties.items() if k not in ("title", "description", "assignee", "status")}
+        if labels:
             logger.debug("Updating issue labels", entity_id=entity_id, labels=labels)
             label_names = self._format_labels(labels)
             self._ensure_labels_exist(label_names)

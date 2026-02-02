@@ -72,14 +72,27 @@ class RedisBackend(Backend):
         Returns:
             Entity object
         """
-        labels = {}
+        properties: dict[str, Any] = {
+            "title": data.get("title", ""),
+            "description": data.get("description", ""),
+            "status": data.get("status", "open"),
+        }
+
+        # Parse labels from JSON and merge into properties
         if data.get("labels"):
             try:
                 labels = json.loads(data["labels"])
+                if isinstance(labels, dict):
+                    properties.update(labels)
             except json.JSONDecodeError:
                 logger.warning("Invalid labels JSON", entity_id=entity_id, labels=data.get("labels"))
 
-        metadata = {}
+        # Add assignee if present
+        if data.get("assignee"):
+            properties["assignee"] = data.get("assignee")
+
+        # Parse metadata
+        metadata: dict[str, Any] = {}
         if data.get("metadata"):
             try:
                 metadata = json.loads(data["metadata"])
@@ -88,31 +101,35 @@ class RedisBackend(Backend):
 
         return Entity(
             id=entity_id,
-            title=data.get("title", ""),
-            description=data.get("description", ""),
-            labels=labels,
-            assignee=data.get("assignee"),
-            status=data.get("status", "open"),
+            type=data.get("type", "default"),
+            properties=properties,
             metadata=metadata,
         )
 
     def create(
         self,
-        title: str,
-        description: str = "",
-        labels: dict[str, str] | None = None,
-        assignee: str | None = None,
+        type: str = "default",
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Create a new entity."""
+        properties = properties or {}
+        title = properties.get("title", "")
+        description = properties.get("description", "")
+        assignee = properties.get("assignee")
+
         entity_id = f"r-{uuid.uuid4().hex[:8]}"
+
+        # Extract labels from properties (excluding standard fields)
+        labels = {k: v for k, v in properties.items() if k not in ("title", "description", "assignee", "status")}
 
         data = {
             "id": entity_id,
+            "type": type,
             "title": title,
             "description": description,
             "labels": json.dumps(labels) if labels else "",
             "assignee": assignee or "",
-            "status": "open",
+            "status": properties.get("status", "open"),
             "metadata": json.dumps({"backend": "redis"}),
         }
 
@@ -137,13 +154,11 @@ class RedisBackend(Backend):
     def update(
         self,
         entity_id: str,
-        title: str | None = None,
-        description: str | None = None,
-        labels: dict[str, str] | None = None,
-        status: str | None = None,
-        assignee: str | None = None,
+        type: str | None = None,
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Update an entity."""
+        properties = properties or {}
         key = self._entity_key(entity_id)
 
         # Check if entity exists
@@ -153,16 +168,22 @@ class RedisBackend(Backend):
 
         # Build update data
         updates = {}
-        if title is not None:
-            updates["title"] = title
-        if description is not None:
-            updates["description"] = description
-        if labels is not None:
+        if type is not None:
+            updates["type"] = type
+
+        if "title" in properties:
+            updates["title"] = properties["title"]
+        if "description" in properties:
+            updates["description"] = properties["description"]
+        if "status" in properties:
+            updates["status"] = properties["status"]
+        if "assignee" in properties:
+            updates["assignee"] = properties["assignee"]
+
+        # Extract labels from properties (excluding standard fields)
+        labels = {k: v for k, v in properties.items() if k not in ("title", "description", "assignee", "status")}
+        if labels:
             updates["labels"] = json.dumps(labels)
-        if status is not None:
-            updates["status"] = status
-        if assignee is not None:
-            updates["assignee"] = assignee
 
         if updates:
             self._redis.hset(key, mapping=updates)
@@ -228,20 +249,20 @@ class RedisBackend(Backend):
                 match = True
                 for key, value in filters.items():
                     if key == "status":
-                        if entity.status != value:
+                        if entity.properties.get("status") != value:
                             match = False
                             break
                     elif key == "assignee":
-                        if entity.assignee != value:
+                        if entity.properties.get("assignee") != value:
                             match = False
                             break
                     elif key == "title":
-                        if value.lower() not in entity.title.lower():
+                        if value.lower() not in str(entity.properties.get("title", "")).lower():
                             match = False
                             break
                     else:
-                        # Filter by label
-                        if entity.labels.get(key) != value:
+                        # Filter by property
+                        if entity.properties.get(key) != value:
                             match = False
                             break
                 if match:
@@ -258,11 +279,11 @@ class RedisBackend(Backend):
             if sort_by == "id":
                 entities.sort(key=lambda e: e.id, reverse=reverse)
             elif sort_by == "title":
-                entities.sort(key=lambda e: e.title.lower(), reverse=reverse)
+                entities.sort(key=lambda e: str(e.properties.get("title", "")).lower(), reverse=reverse)
             elif sort_by == "status":
-                entities.sort(key=lambda e: e.status, reverse=reverse)
+                entities.sort(key=lambda e: e.properties.get("status", ""), reverse=reverse)
             elif sort_by == "assignee":
-                entities.sort(key=lambda e: e.assignee or "", reverse=reverse)
+                entities.sort(key=lambda e: e.properties.get("assignee") or "", reverse=reverse)
 
         # Apply limit
         if limit:
@@ -355,7 +376,13 @@ class RedisBackend(Backend):
                 source_id = parts[1]
                 try:
                     source = self.read(source_id)
-                    links["blocked_by"].append({"id": source.id, "title": source.title, "state": source.status})
+                    links["blocked_by"].append(
+                        {
+                            "id": source.id,
+                            "title": source.properties.get("title", ""),
+                            "state": source.properties.get("status", ""),
+                        }
+                    )
                 except ValueError:
                     pass
 
@@ -363,7 +390,11 @@ class RedisBackend(Backend):
         for link in all_links:
             try:
                 target = self.read(link.target_id)
-                link_info = {"id": target.id, "title": target.title, "state": target.status}
+                link_info = {
+                    "id": target.id,
+                    "title": target.properties.get("title", ""),
+                    "state": target.properties.get("status", ""),
+                }
 
                 # Map link types to standard categories
                 if link.link_type in ("child", "children"):
@@ -376,7 +407,11 @@ class RedisBackend(Backend):
                 pass
 
         return {
-            "entity": {"id": entity.id, "title": entity.title, "state": entity.status},
+            "entity": {
+                "id": entity.id,
+                "title": entity.properties.get("title", ""),
+                "state": entity.properties.get("status", ""),
+            },
             "links": links,
         }
 
