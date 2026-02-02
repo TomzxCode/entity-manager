@@ -270,6 +270,9 @@ class MarkdownBackend(Backend):
 
     def delete(self, entity_ids: list[str]) -> None:
         """Delete entity markdown files."""
+        if not entity_ids:
+            logger.info("No entity IDs provided for deletion")
+            return
         logger.info("Deleting markdown entities", entity_ids=entity_ids, count=len(entity_ids))
 
         for entity_id in entity_ids:
@@ -421,7 +424,6 @@ class MarkdownBackend(Backend):
                         if inner_targets:
                             self.remove_link(target_id, inner_targets, inner_link_type, recursive=True)
 
-        logger.info("Link removed successfully", source_id=source_id, target_ids=target_ids, link_type=link_type)
         logger.info("Link removed successfully", source_id=source_id, target_ids=target_ids, link_type=link_type)
 
     def list_links(self, entity_id: str, link_type: str | None = None) -> list[Link]:

@@ -116,6 +116,12 @@ def test_delete_nonexistent_entity(markdown_backend: MarkdownBackend) -> None:
     markdown_backend.delete(["nonexistent-id"])
 
 
+def test_delete_empty_list(markdown_backend: MarkdownBackend) -> None:
+    """Test deleting with an empty list succeeds silently."""
+    # Should not raise an error
+    markdown_backend.delete([])
+
+
 def test_list_entities(markdown_backend: MarkdownBackend) -> None:
     """Test listing entities."""
     for i in range(1, 4):
