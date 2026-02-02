@@ -158,15 +158,13 @@ def create(
         required_props = [p.name for p in entity_type.properties if p.required]
 
         # Validate against type
-        for prop_def in entity_type.properties:
-            if prop_def.required and prop_def.name not in properties_dict:
-                missing = [p for p in required_props if p not in properties_dict]
-                print(f"Error: Missing required properties: {', '.join(missing)}", file=sys.stderr)
-                print(
-                    f"Required properties for type '{entity_type_name}': {', '.join(required_props)}",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
+        missing = [p for p in required_props if p not in properties_dict]
+        if missing:
+            print(
+                f"Error: Missing required properties for type '{entity_type_name}': {', '.join(missing)}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
             if prop_def.name in properties_dict:
                 # Coerce value to correct type
