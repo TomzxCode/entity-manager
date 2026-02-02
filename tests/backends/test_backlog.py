@@ -10,6 +10,7 @@ from entity_manager.backends.backlog import (
     STATUS_MAP_TO_ENTITY,
     BacklogBackend,
 )
+from entity_manager.models import Entity
 
 
 @pytest.fixture
@@ -109,14 +110,13 @@ class TestCreate:
 
     def test_create_minimal_task(self, backlog_backend: BacklogBackend) -> None:
         """Test creating a task with minimal fields."""
-        entity = backlog_backend.create("Test Task")
+        entity = backlog_backend.create(properties={"title": "Test Task"})
 
         assert entity.id == "task-1"
-        assert entity.title == "Test Task"
-        assert entity.description == ""
-        assert entity.status == "open"
-        assert entity.labels == {}
-        assert entity.assignee is None
+        assert entity.properties["title"] == "Test Task"
+        assert entity.properties.get("description", "") == ""
+        assert entity.properties.get("status", "open") == "open"
+        assert entity.type == "backlog_task"
 
         # Check file was created
         file_path = backlog_backend.tasks_dir / "task-1 - Test Task.md"
@@ -125,23 +125,27 @@ class TestCreate:
     def test_create_task_with_all_fields(self, backlog_backend: BacklogBackend) -> None:
         """Test creating a task with all fields."""
         entity = backlog_backend.create(
-            title="Full Task",
-            description="Detailed description",
-            labels={"feature": "", "priority": "high"},
-            assignee="@bob",
+            properties={
+                "title": "Full Task",
+                "description": "Detailed description",
+                "feature": "",
+                "priority": "high",
+                "assignee": "@bob",
+            }
         )
 
         assert entity.id == "task-1"
-        assert entity.title == "Full Task"
-        assert entity.description == "Detailed description"
-        assert entity.labels == {"feature": "", "priority": "high"}
-        assert entity.assignee == "@bob"
+        assert entity.properties["title"] == "Full Task"
+        assert entity.properties["description"] == "Detailed description"
+        assert entity.properties["feature"] == ""
+        assert entity.properties["priority"] == "high"
+        assert entity.properties["assignee"] == "@bob"
 
     def test_create_generates_sequential_ids(self, backlog_backend: BacklogBackend) -> None:
         """Test that create generates sequential IDs."""
-        entity1 = backlog_backend.create("Task 1")
-        entity2 = backlog_backend.create("Task 2")
-        entity3 = backlog_backend.create("Task 3")
+        entity1 = backlog_backend.create(properties={"title": "Task 1"})
+        entity2 = backlog_backend.create(properties={"title": "Task 2"})
+        entity3 = backlog_backend.create(properties={"title": "Task 3"})
 
         assert entity1.id == "task-1"
         assert entity2.id == "task-2"
@@ -149,7 +153,7 @@ class TestCreate:
 
     def test_create_sanitizes_filename(self, backlog_backend: BacklogBackend) -> None:
         """Test that create sanitizes special characters in title."""
-        _ = backlog_backend.create("Task: With / Special \\ <Characters>")
+        _ = backlog_backend.create(properties={"title": "Task: With / Special \\ <Characters>"})
 
         # File should be created with sanitized name
         files = list(backlog_backend.tasks_dir.glob("task-1*.md"))
@@ -159,15 +163,16 @@ class TestCreate:
 
     def test_write_task_file(self, backlog_backend: BacklogBackend) -> None:
         """Test writing task file with valid frontmatter."""
-        from entity_manager.models import Entity
-
         entity = Entity(
             id="task-1",
-            title="Test Task",
-            description="Test description",
-            status="open",
-            labels={"feature": ""},
-            assignee="@alice",
+            type="default",
+            properties={
+                "title": "Test Task",
+                "description": "Test description",
+                "status": "open",
+                "feature": "",
+                "assignee": "@alice",
+            },
             metadata={"priority": "high"},
         )
 
@@ -198,11 +203,12 @@ class TestRead:
         entity = backlog_backend.read("task-1")
 
         assert entity.id == "task-1"
-        assert entity.title == "Sample Task"
-        assert entity.description == "This is a sample task"
-        assert entity.status == "open"
-        assert entity.labels == {"feature": "", "priority": "high"}
-        assert entity.assignee == "@alice"
+        assert entity.properties["title"] == "Sample Task"
+        assert entity.properties["description"] == "This is a sample task"
+        assert entity.properties["status"] == "open"
+        assert entity.properties["feature"] == ""
+        assert entity.properties["priority"] == "high"
+        assert entity.properties["assignee"] == "@alice"
 
     def test_read_parses_labels_correctly(self, backlog_backend: BacklogBackend) -> None:
         """Test that read parses labels with key:value format."""
@@ -220,11 +226,9 @@ labels:
         )
 
         entity = backlog_backend.read("task-1")
-        assert entity.labels == {
-            "simple": "",
-            "key": "value",
-            "another": "complex:value",
-        }
+        assert entity.properties["simple"] == ""
+        assert entity.properties["key"] == "value"
+        assert entity.properties["another"] == "complex:value"
 
     def test_read_maps_statuses(self, backlog_backend: BacklogBackend) -> None:
         """Test that read maps Backlog.md statuses to Entity Manager statuses."""
@@ -248,7 +252,7 @@ status: "{backlog_status}"
             )
 
             entity = backlog_backend.read(task_id)
-            assert entity.status == expected_status
+            assert entity.properties["status"] == expected_status
 
     def test_read_nonexistent_task_raises_error(self, backlog_backend: BacklogBackend) -> None:
         """Test reading a non-existent task raises ValueError."""
@@ -266,9 +270,9 @@ class TestUpdate:
 
     def test_update_title(self, backlog_backend: BacklogBackend, sample_task_file: Path) -> None:
         """Test updating task title."""
-        entity = backlog_backend.update("task-1", title="Updated Title")
+        entity = backlog_backend.update("task-1", properties={"title": "Updated Title"})
 
-        assert entity.title == "Updated Title"
+        assert entity.properties["title"] == "Updated Title"
 
         # Verify file was updated
         updated_file = backlog_backend.tasks_dir / "task-1 - Updated Title.md"
@@ -278,15 +282,15 @@ class TestUpdate:
 
     def test_update_description(self, backlog_backend: BacklogBackend, sample_task_file: Path) -> None:
         """Test updating task description."""
-        entity = backlog_backend.update("task-1", description="New description")
+        entity = backlog_backend.update("task-1", properties={"description": "New description"})
 
-        assert entity.description == "New description"
+        assert entity.properties["description"] == "New description"
 
     def test_update_status(self, backlog_backend: BacklogBackend, sample_task_file: Path) -> None:
         """Test updating task status."""
-        entity = backlog_backend.update("task-1", status="in_progress")
+        entity = backlog_backend.update("task-1", properties={"status": "in_progress"})
 
-        assert entity.status == "in_progress"
+        assert entity.properties["status"] == "in_progress"
 
         # Verify file was updated with correct status
         file_path = backlog_backend._get_task_file_path("task-1")
@@ -294,27 +298,28 @@ class TestUpdate:
         assert frontmatter["status"] == "In Progress"
 
     def test_update_labels(self, backlog_backend: BacklogBackend, sample_task_file: Path) -> None:
-        """Test updating task labels."""
+        """Test updating task labels (stored as properties)."""
         new_labels = {"bug": "", "priority": "urgent"}
-        entity = backlog_backend.update("task-1", labels=new_labels)
+        entity = backlog_backend.update("task-1", properties=new_labels)
 
-        assert entity.labels == new_labels
+        assert entity.properties["bug"] == ""
+        assert entity.properties["priority"] == "urgent"
 
     def test_update_assignee(self, backlog_backend: BacklogBackend, sample_task_file: Path) -> None:
         """Test updating task assignee."""
-        entity = backlog_backend.update("task-1", assignee="@charlie")
+        entity = backlog_backend.update("task-1", properties={"assignee": "@charlie"})
 
-        assert entity.assignee == "@charlie"
+        assert entity.properties["assignee"] == "@charlie"
 
     def test_update_preserves_other_fields(self, backlog_backend: BacklogBackend, sample_task_file: Path) -> None:
         """Test that update preserves fields not being updated."""
         original = backlog_backend.read("task-1")
 
-        updated = backlog_backend.update("task-1", status="in_progress")
+        updated = backlog_backend.update("task-1", properties={"status": "in_progress"})
 
-        assert updated.title == original.title
-        assert updated.description == original.description
-        assert updated.assignee == original.assignee
+        assert updated.properties["title"] == original.properties["title"]
+        assert updated.properties["description"] == original.properties["description"]
+        assert updated.properties["assignee"] == original.properties["assignee"]
 
 
 class TestDelete:
@@ -328,9 +333,9 @@ class TestDelete:
 
     def test_delete_multiple_tasks(self, backlog_backend: BacklogBackend) -> None:
         """Test deleting multiple tasks."""
-        backlog_backend.create("Task 1")
-        backlog_backend.create("Task 2")
-        backlog_backend.create("Task 3")
+        backlog_backend.create(properties={"title": "Task 1"})
+        backlog_backend.create(properties={"title": "Task 2"})
+        backlog_backend.create(properties={"title": "Task 3"})
 
         backlog_backend.delete(["task-1", "task-2"])
 
@@ -351,41 +356,41 @@ class TestList:
 
     def test_list_all_tasks(self, backlog_backend: BacklogBackend) -> None:
         """Test listing all tasks."""
-        backlog_backend.create("Task 1")
-        backlog_backend.create("Task 2")
-        backlog_backend.create("Task 3")
+        backlog_backend.create(properties={"title": "Task 1"})
+        backlog_backend.create(properties={"title": "Task 2"})
+        backlog_backend.create(properties={"title": "Task 3"})
 
         entities = backlog_backend.list_entities()
 
         assert len(entities) == 3
-        titles = {e.title for e in entities}
+        titles = {e.properties["title"] for e in entities}
         assert titles == {"Task 1", "Task 2", "Task 3"}
 
     def test_list_with_status_filter(self, backlog_backend: BacklogBackend) -> None:
         """Test listing tasks with status filter."""
-        backlog_backend.create("Task 1")
-        task2 = backlog_backend.create("Task 2")
-        task3 = backlog_backend.create("Task 3")
+        backlog_backend.create(properties={"title": "Task 1"})
+        task2 = backlog_backend.create(properties={"title": "Task 2"})
+        task3 = backlog_backend.create(properties={"title": "Task 3"})
 
         # Update statuses
-        backlog_backend.update(task2.id, status="in_progress")
-        backlog_backend.update(task3.id, status="closed")
+        backlog_backend.update(task2.id, properties={"status": "in_progress"})
+        backlog_backend.update(task3.id, properties={"status": "closed"})
 
-        # List open tasks
+        # List open tasks (using backlog status format)
         open_tasks = backlog_backend.list_entities(filters={"status": "To Do"})
         assert len(open_tasks) == 1
-        assert open_tasks[0].title == "Task 1"
+        assert open_tasks[0].properties["title"] == "Task 1"
 
         # List in_progress tasks
         progress_tasks = backlog_backend.list_entities(filters={"status": "In Progress"})
         assert len(progress_tasks) == 1
-        assert progress_tasks[0].title == "Task 2"
+        assert progress_tasks[0].properties["title"] == "Task 2"
 
     def test_list_with_limit(self, backlog_backend: BacklogBackend) -> None:
         """Test listing tasks with limit."""
-        backlog_backend.create("Task 1")
-        backlog_backend.create("Task 2")
-        backlog_backend.create("Task 3")
+        backlog_backend.create(properties={"title": "Task 1"})
+        backlog_backend.create(properties={"title": "Task 2"})
+        backlog_backend.create(properties={"title": "Task 3"})
 
         entities = backlog_backend.list_entities(limit=2)
 
@@ -393,9 +398,9 @@ class TestList:
 
     def test_list_sorts_by_id_descending(self, backlog_backend: BacklogBackend) -> None:
         """Test that list returns tasks sorted by ID (descending)."""
-        backlog_backend.create("Task 1")
-        backlog_backend.create("Task 2")
-        backlog_backend.create("Task 3")
+        backlog_backend.create(properties={"title": "Task 1"})
+        backlog_backend.create(properties={"title": "Task 2"})
+        backlog_backend.create(properties={"title": "Task 3"})
 
         entities = backlog_backend.list_entities()
 
@@ -410,8 +415,8 @@ class TestLinks:
 
     def test_add_dependency(self, backlog_backend: BacklogBackend) -> None:
         """Test adding a dependency between tasks."""
-        task1 = backlog_backend.create("Task 1")
-        task2 = backlog_backend.create("Task 2")
+        task1 = backlog_backend.create(properties={"title": "Task 1"})
+        task2 = backlog_backend.create(properties={"title": "Task 2"})
 
         backlog_backend.add_link(task2.id, [task1.id], "blocked_by")
 
@@ -423,9 +428,9 @@ class TestLinks:
 
     def test_add_multiple_dependencies(self, backlog_backend: BacklogBackend) -> None:
         """Test adding multiple dependencies."""
-        task1 = backlog_backend.create("Task 1")
-        task2 = backlog_backend.create("Task 2")
-        task3 = backlog_backend.create("Task 3")
+        task1 = backlog_backend.create(properties={"title": "Task 1"})
+        task2 = backlog_backend.create(properties={"title": "Task 2"})
+        task3 = backlog_backend.create(properties={"title": "Task 3"})
 
         backlog_backend.add_link(task3.id, [task1.id, task2.id], "blocked_by")
 
@@ -434,8 +439,8 @@ class TestLinks:
 
     def test_remove_dependency(self, backlog_backend: BacklogBackend) -> None:
         """Test removing a dependency."""
-        task1 = backlog_backend.create("Task 1")
-        task2 = backlog_backend.create("Task 2")
+        task1 = backlog_backend.create(properties={"title": "Task 1"})
+        task2 = backlog_backend.create(properties={"title": "Task 2"})
 
         backlog_backend.add_link(task2.id, [task1.id], "blocked_by")
         backlog_backend.remove_link(task2.id, [task1.id], "blocked_by")
@@ -445,8 +450,8 @@ class TestLinks:
 
     def test_list_links_filters_by_type(self, backlog_backend: BacklogBackend) -> None:
         """Test listing links with type filter."""
-        task1 = backlog_backend.create("Task 1")
-        task2 = backlog_backend.create("Task 2")
+        task1 = backlog_backend.create(properties={"title": "Task 1"})
+        task2 = backlog_backend.create(properties={"title": "Task 2"})
 
         backlog_backend.add_link(task2.id, [task1.id], "blocked_by")
 
@@ -460,8 +465,8 @@ class TestLinks:
 
     def test_unsupported_link_type_raises_error(self, backlog_backend: BacklogBackend) -> None:
         """Test that unsupported link types raise ValueError."""
-        task1 = backlog_backend.create("Task 1")
-        task2 = backlog_backend.create("Task 2")
+        task1 = backlog_backend.create(properties={"title": "Task 1"})
+        task2 = backlog_backend.create(properties={"title": "Task 2"})
 
         with pytest.raises(ValueError, match="Unsupported link type"):
             backlog_backend.add_link(task2.id, [task1.id], "parent")
@@ -531,9 +536,9 @@ class TestGetLinkTree:
 
     def test_get_link_tree(self, backlog_backend: BacklogBackend) -> None:
         """Test getting link tree for a task."""
-        task1 = backlog_backend.create("Task 1")
-        task2 = backlog_backend.create("Task 2")
-        task3 = backlog_backend.create("Task 3")
+        task1 = backlog_backend.create(properties={"title": "Task 1"})
+        task2 = backlog_backend.create(properties={"title": "Task 2"})
+        task3 = backlog_backend.create(properties={"title": "Task 3"})
 
         # Create dependencies: task3 depends on task1 and task2
         backlog_backend.add_link(task3.id, [task1.id, task2.id], "blocked_by")
@@ -546,7 +551,7 @@ class TestGetLinkTree:
 
     def test_get_link_tree_with_missing_target(self, backlog_backend: BacklogBackend) -> None:
         """Test get_link_tree when target doesn't exist."""
-        task1 = backlog_backend.create("Task 1")
+        task1 = backlog_backend.create(properties={"title": "Task 1"})
 
         # Manually add a dependency to non-existent task
         file_path = backlog_backend._get_task_file_path(task1.id)
@@ -567,9 +572,9 @@ class TestFindCycles:
 
     def test_find_no_cycles(self, backlog_backend: BacklogBackend) -> None:
         """Test cycle detection with acyclic graph."""
-        task1 = backlog_backend.create("Task 1")
-        task2 = backlog_backend.create("Task 2")
-        task3 = backlog_backend.create("Task 3")
+        task1 = backlog_backend.create(properties={"title": "Task 1"})
+        task2 = backlog_backend.create(properties={"title": "Task 2"})
+        task3 = backlog_backend.create(properties={"title": "Task 3"})
 
         # Create chain: task3 -> task2 -> task1
         backlog_backend.add_link(task2.id, [task1.id], "blocked_by")
@@ -580,8 +585,8 @@ class TestFindCycles:
 
     def test_find_cycle(self, backlog_backend: BacklogBackend) -> None:
         """Test cycle detection with circular dependency."""
-        task1 = backlog_backend.create("Task 1")
-        task2 = backlog_backend.create("Task 2")
+        task1 = backlog_backend.create(properties={"title": "Task 1"})
+        task2 = backlog_backend.create(properties={"title": "Task 2"})
 
         # Create cycle: task1 -> task2 -> task1
         backlog_backend.add_link(task1.id, [task2.id], "blocked_by")
@@ -603,8 +608,8 @@ class TestGetNextId:
 
     def test_get_next_id_existing_tasks(self, backlog_backend: BacklogBackend) -> None:
         """Test getting next ID with existing tasks."""
-        backlog_backend.create("Task 1")
-        backlog_backend.create("Task 2")
+        backlog_backend.create(properties={"title": "Task 1"})
+        backlog_backend.create(properties={"title": "Task 2"})
 
         next_id = backlog_backend._get_next_id()
         assert next_id == "task-3"
@@ -615,7 +620,7 @@ class TestNormalizeIds:
 
     def test_read_normalizes_id(self, backlog_backend: BacklogBackend) -> None:
         """Test that read normalizes ID without task- prefix."""
-        _ = backlog_backend.create("Test Task")
+        _ = backlog_backend.create(properties={"title": "Test Task"})
 
         # Read with just the number
         entity = backlog_backend.read("1")
@@ -623,7 +628,7 @@ class TestNormalizeIds:
 
     def test_delete_normalizes_ids(self, backlog_backend: BacklogBackend) -> None:
         """Test that delete normalizes IDs."""
-        backlog_backend.create("Task 1")
+        backlog_backend.create(properties={"title": "Task 1"})
 
         # Delete with just the number
         backlog_backend.delete(["1"])
@@ -633,8 +638,8 @@ class TestNormalizeIds:
 
     def test_add_link_normalizes_ids(self, backlog_backend: BacklogBackend) -> None:
         """Test that add_link normalizes IDs."""
-        _ = backlog_backend.create("Task 1")
-        _ = backlog_backend.create("Task 2")
+        _ = backlog_backend.create(properties={"title": "Task 1"})
+        _ = backlog_backend.create(properties={"title": "Task 2"})
 
         # Add link with numeric IDs
         backlog_backend.add_link("2", ["1"], "blocked_by")

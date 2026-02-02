@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from entity_manager.cli import configure_logging, create, get_backend, list_entities, read, update
+from entity_manager.cli import configure_logging, create, get_backend, list_entities, read
 from entity_manager.config import Config
 from entity_manager.models import Entity
 
@@ -24,45 +24,30 @@ def mock_backend():
     backend = MagicMock()
     backend.create.return_value = Entity(
         id="1",
-        title="Test Task",
-        description="Test description",
-        status="open",
-        labels={},
-        assignee=None,
+        type="default",
+        properties={"title": "Test Task", "description": "Test description", "status": "open"},
     )
     backend.read.return_value = Entity(
         id="1",
-        title="Test Task",
-        description="Test description",
-        status="open",
-        labels={"type": "bug"},
-        assignee="user1",
+        type="default",
+        properties={"title": "Test Task", "description": "Test description", "status": "open", "assignee": "user1"},
         metadata={"url": "http://example.com"},
     )
     backend.update.return_value = Entity(
         id="1",
-        title="Updated Task",
-        description="Updated description",
-        status="closed",
-        labels={},
-        assignee=None,
+        type="default",
+        properties={"title": "Updated Task", "description": "Updated description", "status": "closed"},
     )
     backend.list_entities.return_value = [
         Entity(
             id="1",
-            title="Task 1",
-            description="",
-            status="open",
-            labels={"priority": "high"},
-            assignee=None,
+            type="default",
+            properties={"title": "Task 1", "description": "", "status": "open"},
         ),
         Entity(
             id="2",
-            title="Task 2",
-            description="",
-            status="closed",
-            labels={},
-            assignee=None,
+            type="default",
+            properties={"title": "Task 2", "description": "", "status": "closed"},
         ),
     ]
     return backend
@@ -180,39 +165,24 @@ def test_get_backend_unknown(temp_config_dir):
 def test_create_entity_minimal(mock_backend, capsys):
     """Test creating entity with minimal fields."""
     with patch("entity_manager.cli.get_backend", return_value=mock_backend):
-        create("Test Task")
+        with patch("entity_manager.cli.TypeManager") as mock_tm:
+            from entity_manager.models import EntityType, PropertyDefinition, PropertyType
 
-    mock_backend.create.assert_called_once_with(
-        title="Test Task",
-        description="",
-        labels={},
-        assignee=None,
-    )
-    captured = capsys.readouterr()
-    assert "Created entity 1: Test Task" in captured.out
-
-
-def test_create_entity_with_all_fields(mock_backend, capsys):
-    """Test creating entity with all fields."""
-    with patch("entity_manager.cli.get_backend", return_value=mock_backend):
-        create("Test Task", description="Test desc", labels="type:bug,priority:high", assignee="user1")
-
-    mock_backend.create.assert_called_once_with(
-        title="Test Task",
-        description="Test desc",
-        labels={"type": "bug", "priority": "high"},
-        assignee="user1",
-    )
-
-
-def test_create_entity_with_labels_no_value(mock_backend):
-    """Test creating entity with labels without values."""
-    with patch("entity_manager.cli.get_backend", return_value=mock_backend):
-        create("Test Task", labels="bug,feature")
+            mock_tm.return_value.get_type.return_value = EntityType(
+                name="default",
+                properties=[
+                    PropertyDefinition(name="title", type=PropertyType.STRING, required=True),
+                    PropertyDefinition(name="description", type=PropertyType.STRING, default=""),
+                    PropertyDefinition(name="status", type=PropertyType.STRING, default="open"),
+                ],
+            )
+            create("title=Test Task")
 
     mock_backend.create.assert_called_once()
-    call_args = mock_backend.create.call_args
-    assert call_args[1]["labels"] == {"bug": "", "feature": ""}
+    call_kwargs = mock_backend.create.call_args[1]
+    assert call_kwargs["properties"]["title"] == "Test Task"
+    captured = capsys.readouterr()
+    assert "Created entity 1: Test Task" in captured.out
 
 
 def test_read_entity(mock_backend, capsys):
@@ -223,11 +193,11 @@ def test_read_entity(mock_backend, capsys):
     mock_backend.read.assert_called_once_with("1")
     captured = capsys.readouterr()
     assert "Entity: 1" in captured.out
-    assert "Title: Test Task" in captured.out
-    assert "Description: Test description" in captured.out
-    assert "Status: open" in captured.out
-    assert "Labels: type:bug" in captured.out
-    assert "Assignee: user1" in captured.out
+    assert "Type: default" in captured.out
+    assert "title: Test Task" in captured.out
+    assert "description: Test description" in captured.out
+    assert "status: open" in captured.out
+    assert "assignee: user1" in captured.out
     assert "URL: http://example.com" in captured.out
 
 
@@ -235,60 +205,17 @@ def test_read_entity_no_labels(mock_backend, capsys):
     """Test reading entity without labels."""
     mock_backend.read.return_value = Entity(
         id="1",
-        title="Test Task",
-        description="Test description",
-        status="open",
-        labels=None,
-        assignee=None,
+        type="default",
+        properties={"title": "Test Task", "description": "Test description", "status": "open"},
     )
 
     with patch("entity_manager.cli.get_backend", return_value=mock_backend):
         read("1")
 
     captured = capsys.readouterr()
-    assert "Labels:" not in captured.out
-    assert "Assignee:" not in captured.out
-
-
-def test_update_entity_title(mock_backend, capsys):
-    """Test updating entity title."""
-    with patch("entity_manager.cli.get_backend", return_value=mock_backend):
-        update("1", title="New Title")
-
-    mock_backend.update.assert_called_once_with(
-        entity_id="1",
-        title="New Title",
-        description=None,
-        labels=None,
-        status=None,
-        assignee=None,
-    )
-    captured = capsys.readouterr()
-    assert "Updated entity 1: Updated Task" in captured.out
-
-
-def test_update_entity_with_labels(mock_backend):
-    """Test updating entity with labels."""
-    with patch("entity_manager.cli.get_backend", return_value=mock_backend):
-        update("1", labels="type:bug,priority:high")
-
-    call_args = mock_backend.update.call_args
-    assert call_args[1]["labels"] == {"type": "bug", "priority": "high"}
-
-
-def test_update_entity_all_fields(mock_backend):
-    """Test updating entity with all fields."""
-    with patch("entity_manager.cli.get_backend", return_value=mock_backend):
-        update("1", title="New Title", description="New desc", labels="type:bug", status="closed", assignee="user2")
-
-    mock_backend.update.assert_called_once_with(
-        entity_id="1",
-        title="New Title",
-        description="New desc",
-        labels={"type": "bug"},
-        status="closed",
-        assignee="user2",
-    )
+    assert "Entity: 1" in captured.out
+    assert "Type: default" in captured.out
+    assert "title: Test Task" in captured.out
 
 
 def test_list_entities(mock_backend, capsys):
@@ -299,8 +226,8 @@ def test_list_entities(mock_backend, capsys):
     mock_backend.list_entities.assert_called_once_with(filters=None, sort_by=None, limit=None)
     captured = capsys.readouterr()
     assert "Found 2 entity(ies):" in captured.out
-    assert "● 1: Task 1 [priority:high]" in captured.out
-    assert "○ 2: Task 2" in captured.out
+    assert "1: Task 1" in captured.out
+    assert "2: Task 2" in captured.out
 
 
 def test_list_entities_with_filter(mock_backend):
@@ -333,11 +260,11 @@ def test_list_entities_with_limit(mock_backend):
 def test_list_entities_no_labels(mock_backend, capsys):
     """Test listing entities without labels."""
     mock_backend.list_entities.return_value = [
-        Entity(id="1", title="Task 1", description="", status="open", labels=None, assignee=None)
+        Entity(id="1", type="default", properties={"title": "Task 1", "status": "open"})
     ]
 
     with patch("entity_manager.cli.get_backend", return_value=mock_backend):
         list_entities()
 
     captured = capsys.readouterr()
-    assert "● 1: Task 1\n" in captured.out
+    assert "1: Task 1" in captured.out

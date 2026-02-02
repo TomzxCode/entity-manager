@@ -82,16 +82,16 @@ class SQLiteBackend(Backend):
             Entity object
         """
         properties = {}
-        if row.get("properties"):
+        if row["properties"]:
             properties = json.loads(row["properties"])
 
         metadata = {}
-        if row.get("metadata"):
+        if row["metadata"]:
             metadata = json.loads(row["metadata"])
 
         return Entity(
             id=row["id"],
-            type=row.get("type", "default"),
+            type=row["type"] or "default",
             properties=properties,
             metadata=metadata,
         )
@@ -215,22 +215,29 @@ class SQLiteBackend(Backend):
                     query += " AND properties LIKE ?"
                     params.append(f"%{key}%{value}%")
 
-        if sort_by:
-            # Validate sort_by to prevent SQL injection
-            allowed_columns = {"id", "type", "created_at", "updated_at"}
-            if sort_by in allowed_columns:
-                query += f" ORDER BY {sort_by}"
-            else:
-                logger.warning("Invalid sort column", sort_by=sort_by)
+        # Check if sort_by is a database column or a property
+        db_columns = {"id", "type", "created_at", "updated_at"}
+        sort_by_is_property = sort_by and sort_by not in db_columns
 
-        if limit:
-            query += " LIMIT ?"
-            params.append(limit)
+        if sort_by and not sort_by_is_property:
+            # Validate sort_by to prevent SQL injection
+            if sort_by in db_columns:
+                query += f" ORDER BY {sort_by}"
 
         cursor.execute(query, params)
         rows = cursor.fetchall()
 
-        return [self._row_to_entity(row) for row in rows]
+        entities = [self._row_to_entity(row) for row in rows]
+
+        # Handle sorting by properties (like title) in Python
+        if sort_by_is_property:
+            entities.sort(key=lambda e: e.properties.get(sort_by, ""))
+
+        # Apply limit in Python if needed (for consistent behavior with property sorting)
+        if limit:
+            entities = entities[:limit]
+
+        return entities
 
     def add_link(self, source_id: str, target_ids: list[str], link_type: str) -> None:
         """Add links from source entity to target entities."""

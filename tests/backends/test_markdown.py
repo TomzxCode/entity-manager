@@ -27,18 +27,22 @@ def markdown_backend(temp_dir: Path) -> MarkdownBackend:
 def test_create_entity(markdown_backend: MarkdownBackend) -> None:
     """Test creating a new entity."""
     entity = markdown_backend.create(
-        title="Test Entity",
-        description="Test description",
-        labels={"priority": "high", "type": "bug"},
-        assignee="testuser",
+        properties={
+            "title": "Test Entity",
+            "description": "Test description",
+            "priority": "high",
+            "type": "bug",
+            "assignee": "testuser",
+        }
     )
 
     assert entity.id.startswith("md-")
-    assert entity.title == "Test Entity"
-    assert entity.description == "Test description"
-    assert entity.labels == {"priority": "high", "type": "bug"}
-    assert entity.assignee == "testuser"
-    assert entity.status == "open"
+    assert entity.properties["title"] == "Test Entity"
+    assert entity.properties["description"] == "Test description"
+    assert entity.properties["priority"] == "high"
+    assert entity.properties["type"] == "bug"
+    assert entity.properties["assignee"] == "testuser"
+    assert entity.properties.get("status", "open") == "open"
 
     # Verify file was created
     file_path = markdown_backend._get_entity_path(entity.id)
@@ -47,13 +51,13 @@ def test_create_entity(markdown_backend: MarkdownBackend) -> None:
 
 def test_read_entity(markdown_backend: MarkdownBackend) -> None:
     """Test reading an entity."""
-    created = markdown_backend.create(title="Test Entity", description="Test description")
+    created = markdown_backend.create(properties={"title": "Test Entity", "description": "Test description"})
 
     entity = markdown_backend.read(created.id)
 
     assert entity.id == created.id
-    assert entity.title == "Test Entity"
-    assert entity.description == "Test description"
+    assert entity.properties["title"] == "Test Entity"
+    assert entity.properties["description"] == "Test description"
 
 
 def test_read_nonexistent_entity(markdown_backend: MarkdownBackend) -> None:
@@ -64,40 +68,44 @@ def test_read_nonexistent_entity(markdown_backend: MarkdownBackend) -> None:
 
 def test_update_entity(markdown_backend: MarkdownBackend) -> None:
     """Test updating an entity."""
-    entity = markdown_backend.create(title="Original Title", description="Original description")
+    entity = markdown_backend.create(properties={"title": "Original Title", "description": "Original description"})
 
     updated = markdown_backend.update(
         entity.id,
-        title="Updated Title",
-        description="Updated description",
-        status="closed",
-        assignee="newuser",
+        properties={
+            "title": "Updated Title",
+            "description": "Updated description",
+            "status": "closed",
+            "assignee": "newuser",
+        },
     )
 
     assert updated.id == entity.id
-    assert updated.title == "Updated Title"
-    assert updated.description == "Updated description"
-    assert updated.status == "closed"
-    assert updated.assignee == "newuser"
+    assert updated.properties["title"] == "Updated Title"
+    assert updated.properties["description"] == "Updated description"
+    assert updated.properties["status"] == "closed"
+    assert updated.properties["assignee"] == "newuser"
 
 
 def test_update_partial_entity(markdown_backend: MarkdownBackend) -> None:
     """Test updating only some fields of an entity."""
-    entity = markdown_backend.create(title="Title", description="Description", labels={"key": "value"}, assignee="user")
+    entity = markdown_backend.create(
+        properties={"title": "Title", "description": "Description", "key": "value", "assignee": "user"}
+    )
 
-    updated = markdown_backend.update(entity.id, title="New Title")
+    updated = markdown_backend.update(entity.id, properties={"title": "New Title"})
 
-    assert updated.title == "New Title"
-    assert updated.description == "Description"  # Unchanged
-    assert updated.labels == {"key": "value"}  # Unchanged
-    assert updated.assignee == "user"  # Unchanged
+    assert updated.properties["title"] == "New Title"
+    assert updated.properties["description"] == "Description"  # Unchanged
+    assert updated.properties["key"] == "value"  # Unchanged
+    assert updated.properties["assignee"] == "user"  # Unchanged
 
 
 def test_delete_entity(markdown_backend: MarkdownBackend) -> None:
     """Test deleting entities."""
-    entity1 = markdown_backend.create(title="Entity 1")
-    entity2 = markdown_backend.create(title="Entity 2")
-    entity3 = markdown_backend.create(title="Entity 3")
+    entity1 = markdown_backend.create(properties={"title": "Entity 1"})
+    entity2 = markdown_backend.create(properties={"title": "Entity 2"})
+    entity3 = markdown_backend.create(properties={"title": "Entity 3"})
 
     # Delete entity1 and entity2
     markdown_backend.delete([entity1.id, entity2.id])
@@ -123,21 +131,21 @@ def test_delete_empty_list(markdown_backend: MarkdownBackend) -> None:
 def test_list_entities(markdown_backend: MarkdownBackend) -> None:
     """Test listing entities."""
     for i in range(1, 4):
-        markdown_backend.create(title=f"Entity {i}")
+        markdown_backend.create(properties={"title": f"Entity {i}"})
 
     entities = markdown_backend.list_entities()
 
     assert len(entities) == 3
-    titles = {e.title for e in entities}
+    titles = {e.properties["title"] for e in entities}
     assert titles == {"Entity 1", "Entity 2", "Entity 3"}
 
 
 def test_list_entities_with_filter_by_status(markdown_backend: MarkdownBackend) -> None:
     """Test listing entities filtered by status."""
-    entity1 = markdown_backend.create(title="Open Entity")
-    entity2 = markdown_backend.create(title="Closed Entity")
+    entity1 = markdown_backend.create(properties={"title": "Open Entity"})
+    entity2 = markdown_backend.create(properties={"title": "Closed Entity"})
 
-    markdown_backend.update(entity2.id, status="closed")
+    markdown_backend.update(entity2.id, properties={"status": "closed"})
 
     open_entities = markdown_backend.list_entities(filters={"status": "open"})
     closed_entities = markdown_backend.list_entities(filters={"status": "closed"})
@@ -150,32 +158,32 @@ def test_list_entities_with_filter_by_status(markdown_backend: MarkdownBackend) 
 
 def test_list_entities_with_filter_by_assignee(markdown_backend: MarkdownBackend) -> None:
     """Test listing entities filtered by assignee."""
-    markdown_backend.create(title="Entity 1", assignee="user1")
-    markdown_backend.create(title="Entity 2", assignee="user2")
+    markdown_backend.create(properties={"title": "Entity 1", "assignee": "user1"})
+    markdown_backend.create(properties={"title": "Entity 2", "assignee": "user2"})
 
     user1_entities = markdown_backend.list_entities(filters={"assignee": "user1"})
 
     assert len(user1_entities) == 1
-    assert user1_entities[0].title == "Entity 1"
+    assert user1_entities[0].properties["title"] == "Entity 1"
 
 
 def test_list_entities_with_sort_by_title(markdown_backend: MarkdownBackend) -> None:
     """Test listing entities sorted by title."""
-    markdown_backend.create(title="Zebra")
-    markdown_backend.create(title="Apple")
-    markdown_backend.create(title="Middle")
+    markdown_backend.create(properties={"title": "Zebra"})
+    markdown_backend.create(properties={"title": "Apple"})
+    markdown_backend.create(properties={"title": "Middle"})
 
     entities_asc = markdown_backend.list_entities(sort_by="title")
     entities_desc = markdown_backend.list_entities(sort_by="-title")
 
-    assert [e.title for e in entities_asc] == ["Apple", "Middle", "Zebra"]
-    assert [e.title for e in entities_desc] == ["Zebra", "Middle", "Apple"]
+    assert [e.properties["title"] for e in entities_asc] == ["Apple", "Middle", "Zebra"]
+    assert [e.properties["title"] for e in entities_desc] == ["Zebra", "Middle", "Apple"]
 
 
 def test_list_entities_with_limit(markdown_backend: MarkdownBackend) -> None:
     """Test listing entities with a limit."""
     for i in range(10):
-        markdown_backend.create(title=f"Entity {i}")
+        markdown_backend.create(properties={"title": f"Entity {i}"})
 
     entities = markdown_backend.list_entities(limit=5)
 
@@ -184,8 +192,8 @@ def test_list_entities_with_limit(markdown_backend: MarkdownBackend) -> None:
 
 def test_add_link(markdown_backend: MarkdownBackend) -> None:
     """Test adding a link between entities."""
-    entity1 = markdown_backend.create(title="Entity 1")
-    entity2 = markdown_backend.create(title="Entity 2")
+    entity1 = markdown_backend.create(properties={"title": "Entity 1"})
+    entity2 = markdown_backend.create(properties={"title": "Entity 2"})
 
     markdown_backend.add_link(entity1.id, [entity2.id], "blocked by")
 
@@ -199,9 +207,9 @@ def test_add_link(markdown_backend: MarkdownBackend) -> None:
 
 def test_add_multiple_links(markdown_backend: MarkdownBackend) -> None:
     """Test adding links to multiple targets."""
-    entity1 = markdown_backend.create(title="Entity 1")
-    entity2 = markdown_backend.create(title="Entity 2")
-    entity3 = markdown_backend.create(title="Entity 3")
+    entity1 = markdown_backend.create(properties={"title": "Entity 1"})
+    entity2 = markdown_backend.create(properties={"title": "Entity 2"})
+    entity3 = markdown_backend.create(properties={"title": "Entity 3"})
 
     markdown_backend.add_link(entity1.id, [entity2.id, entity3.id], "blocking")
 
@@ -214,7 +222,7 @@ def test_add_multiple_links(markdown_backend: MarkdownBackend) -> None:
 
 def test_add_link_nonexistent_entity(markdown_backend: MarkdownBackend) -> None:
     """Test adding a link to a non-existent entity raises an error."""
-    entity1 = markdown_backend.create(title="Entity 1")
+    entity1 = markdown_backend.create(properties={"title": "Entity 1"})
 
     with pytest.raises(ValueError, match="Entity not found"):
         markdown_backend.add_link(entity1.id, ["nonexistent-id"], "blocked by")
@@ -222,8 +230,8 @@ def test_add_link_nonexistent_entity(markdown_backend: MarkdownBackend) -> None:
 
 def test_add_link_idempotent(markdown_backend: MarkdownBackend) -> None:
     """Test adding the same link twice is idempotent."""
-    entity1 = markdown_backend.create(title="Entity 1")
-    entity2 = markdown_backend.create(title="Entity 2")
+    entity1 = markdown_backend.create(properties={"title": "Entity 1"})
+    entity2 = markdown_backend.create(properties={"title": "Entity 2"})
 
     markdown_backend.add_link(entity1.id, [entity2.id], "blocked by")
     markdown_backend.add_link(entity1.id, [entity2.id], "blocked by")
@@ -236,8 +244,8 @@ def test_add_link_idempotent(markdown_backend: MarkdownBackend) -> None:
 
 def test_remove_link(markdown_backend: MarkdownBackend) -> None:
     """Test removing a link."""
-    entity1 = markdown_backend.create(title="Entity 1")
-    entity2 = markdown_backend.create(title="Entity 2")
+    entity1 = markdown_backend.create(properties={"title": "Entity 1"})
+    entity2 = markdown_backend.create(properties={"title": "Entity 2"})
 
     markdown_backend.add_link(entity1.id, [entity2.id], "blocked by")
     markdown_backend.remove_link(entity1.id, [entity2.id], "blocked by")
@@ -249,9 +257,9 @@ def test_remove_link(markdown_backend: MarkdownBackend) -> None:
 
 def test_remove_link_recursive(markdown_backend: MarkdownBackend) -> None:
     """Test removing links recursively."""
-    entity1 = markdown_backend.create(title="Entity 1")
-    entity2 = markdown_backend.create(title="Entity 2")
-    entity3 = markdown_backend.create(title="Entity 3")
+    entity1 = markdown_backend.create(properties={"title": "Entity 1"})
+    entity2 = markdown_backend.create(properties={"title": "Entity 2"})
+    entity3 = markdown_backend.create(properties={"title": "Entity 3"})
 
     # Create chain: 1 -> 2 -> 3
     markdown_backend.add_link(entity1.id, [entity2.id], "children")
@@ -270,9 +278,9 @@ def test_remove_link_recursive(markdown_backend: MarkdownBackend) -> None:
 
 def test_list_links_filtered_by_type(markdown_backend: MarkdownBackend) -> None:
     """Test listing links filtered by type."""
-    entity1 = markdown_backend.create(title="Entity 1")
-    entity2 = markdown_backend.create(title="Entity 2")
-    entity3 = markdown_backend.create(title="Entity 3")
+    entity1 = markdown_backend.create(properties={"title": "Entity 1"})
+    entity2 = markdown_backend.create(properties={"title": "Entity 2"})
+    entity3 = markdown_backend.create(properties={"title": "Entity 3"})
 
     markdown_backend.add_link(entity1.id, [entity2.id], "blocked by")
     markdown_backend.add_link(entity1.id, [entity3.id], "parent")
@@ -288,9 +296,9 @@ def test_list_links_filtered_by_type(markdown_backend: MarkdownBackend) -> None:
 
 def test_get_link_tree(markdown_backend: MarkdownBackend) -> None:
     """Test getting the link tree for an entity."""
-    entity1 = markdown_backend.create(title="Parent")
-    entity2 = markdown_backend.create(title="Child")
-    entity3 = markdown_backend.create(title="Blocking")
+    entity1 = markdown_backend.create(properties={"title": "Parent"})
+    entity2 = markdown_backend.create(properties={"title": "Child"})
+    entity3 = markdown_backend.create(properties={"title": "Blocking"})
 
     markdown_backend.add_link(entity1.id, [entity2.id], "children")
     markdown_backend.add_link(entity3.id, [entity1.id], "blocking")
@@ -307,9 +315,9 @@ def test_get_link_tree(markdown_backend: MarkdownBackend) -> None:
 
 def test_find_cycles_no_cycles(markdown_backend: MarkdownBackend) -> None:
     """Test finding cycles when there are none."""
-    entity1 = markdown_backend.create(title="Entity 1")
-    entity2 = markdown_backend.create(title="Entity 2")
-    entity3 = markdown_backend.create(title="Entity 3")
+    entity1 = markdown_backend.create(properties={"title": "Entity 1"})
+    entity2 = markdown_backend.create(properties={"title": "Entity 2"})
+    entity3 = markdown_backend.create(properties={"title": "Entity 3"})
 
     markdown_backend.add_link(entity1.id, [entity2.id], "blocked by")
     markdown_backend.add_link(entity2.id, [entity3.id], "blocked by")
@@ -321,9 +329,9 @@ def test_find_cycles_no_cycles(markdown_backend: MarkdownBackend) -> None:
 
 def test_find_cycles_with_cycle(markdown_backend: MarkdownBackend) -> None:
     """Test finding cycles when they exist."""
-    entity1 = markdown_backend.create(title="Entity 1")
-    entity2 = markdown_backend.create(title="Entity 2")
-    entity3 = markdown_backend.create(title="Entity 3")
+    entity1 = markdown_backend.create(properties={"title": "Entity 1"})
+    entity2 = markdown_backend.create(properties={"title": "Entity 2"})
+    entity3 = markdown_backend.create(properties={"title": "Entity 3"})
 
     # Create cycle: 1 -> 2 -> 3 -> 1
     markdown_backend.add_link(entity1.id, [entity2.id], "blocked by")
@@ -340,7 +348,7 @@ def test_find_cycles_with_cycle(markdown_backend: MarkdownBackend) -> None:
 
 def test_find_cycles_self_reference(markdown_backend: MarkdownBackend) -> None:
     """Test finding cycles with self-referential links."""
-    entity1 = markdown_backend.create(title="Entity 1")
+    entity1 = markdown_backend.create(properties={"title": "Entity 1"})
 
     markdown_backend.add_link(entity1.id, [entity1.id], "blocked by")
 
@@ -352,9 +360,9 @@ def test_find_cycles_self_reference(markdown_backend: MarkdownBackend) -> None:
 
 def test_delete_entity_removes_links(markdown_backend: MarkdownBackend) -> None:
     """Test that deleting an entity removes its links."""
-    entity1 = markdown_backend.create(title="Entity 1")
-    entity2 = markdown_backend.create(title="Entity 2")
-    entity3 = markdown_backend.create(title="Entity 3")
+    entity1 = markdown_backend.create(properties={"title": "Entity 1"})
+    entity2 = markdown_backend.create(properties={"title": "Entity 2"})
+    entity3 = markdown_backend.create(properties={"title": "Entity 3"})
 
     markdown_backend.add_link(entity1.id, [entity2.id, entity3.id], "children")
     markdown_backend.add_link(entity2.id, [entity3.id], "blocking")
@@ -373,10 +381,13 @@ def test_delete_entity_removes_links(markdown_backend: MarkdownBackend) -> None:
 def test_yaml_frontmatter_parsing(markdown_backend: MarkdownBackend) -> None:
     """Test that YAML frontmatter is correctly parsed and written."""
     entity = markdown_backend.create(
-        title="Test",
-        description="Description with **markdown**",
-        labels={"key": "value", "priority": "high"},
-        assignee="user",
+        properties={
+            "title": "Test",
+            "description": "Description with **markdown**",
+            "key": "value",
+            "priority": "high",
+            "assignee": "user",
+        }
     )
 
     file_path = markdown_backend._get_entity_path(entity.id)
@@ -396,7 +407,7 @@ def test_generate_unique_ids(markdown_backend: MarkdownBackend) -> None:
     """Test that generated entity IDs are unique."""
     ids = set()
     for _ in range(100):
-        entity = markdown_backend.create(title=f"Entity {len(ids)}")
+        entity = markdown_backend.create(properties={"title": f"Entity {len(ids)}"})
         ids.add(entity.id)
 
     # All IDs should be unique

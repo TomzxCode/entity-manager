@@ -28,39 +28,43 @@ class TestFullWorkflow:
         """Test complete workflow: create, read, update, delete."""
         # Create
         entity = backlog_backend.create(
-            title="Integration Test Task",
-            description="Testing full workflow",
-            labels={"test": "", "priority": "high"},
-            assignee="@tester",
+            properties={
+                "title": "Integration Test Task",
+                "description": "Testing full workflow",
+                "test": "",
+                "priority": "high",
+                "assignee": "@tester",
+            }
         )
 
         assert entity.id == "task-1"
-        assert entity.title == "Integration Test Task"
+        assert entity.properties["title"] == "Integration Test Task"
 
         # Read
         read_entity = backlog_backend.read("task-1")
         assert read_entity.id == "task-1"
-        assert read_entity.title == "Integration Test Task"
-        assert read_entity.description == "Testing full workflow"
-        assert read_entity.labels == {"test": "", "priority": "high"}
-        assert read_entity.assignee == "@tester"
-        assert read_entity.status == "open"
+        assert read_entity.properties["title"] == "Integration Test Task"
+        assert read_entity.properties["description"] == "Testing full workflow"
+        assert read_entity.properties["test"] == ""
+        assert read_entity.properties["priority"] == "high"
+        assert read_entity.properties["assignee"] == "@tester"
+        assert read_entity.properties["status"] == "open"
 
         # Update
         updated = backlog_backend.update(
             "task-1",
-            title="Updated Task Title",
-            status="in_progress",
+            properties={"title": "Updated Task Title", "status": "in_progress"},
         )
-        assert updated.title == "Updated Task Title"
-        assert updated.status == "in_progress"
-        assert updated.description == "Testing full workflow"  # Preserved
-        assert updated.assignee == "@tester"  # Preserved
+        assert updated.properties["title"] == "Updated Task Title"
+        assert updated.properties["status"] == "in_progress"
+        # Other properties are preserved
+        assert updated.properties["description"] == "Testing full workflow"
+        assert updated.properties["assignee"] == "@tester"
 
         # Verify update persisted
         re_read = backlog_backend.read("task-1")
-        assert re_read.title == "Updated Task Title"
-        assert re_read.status == "in_progress"
+        assert re_read.properties["title"] == "Updated Task Title"
+        assert re_read.properties["status"] == "in_progress"
 
         # Delete
         backlog_backend.delete(["task-1"])
@@ -72,34 +76,34 @@ class TestFullWorkflow:
     def test_list_after_multiple_creates(self, backlog_backend: BacklogBackend) -> None:
         """Test listing tasks after creating multiple."""
         # Create multiple tasks
-        backlog_backend.create("First Task")
-        backlog_backend.create("Second Task")
-        backlog_backend.create("Third Task")
+        backlog_backend.create(properties={"title": "First Task"})
+        backlog_backend.create(properties={"title": "Second Task"})
+        backlog_backend.create(properties={"title": "Third Task"})
 
         # List all
         entities = backlog_backend.list_entities()
         assert len(entities) == 3
 
         # Verify titles
-        titles = {e.title for e in entities}
+        titles = {e.properties["title"] for e in entities}
         assert titles == {"First Task", "Second Task", "Third Task"}
 
     def test_create_updates_metadata(self, backlog_backend: BacklogBackend) -> None:
         """Test that create adds proper metadata."""
-        entity = backlog_backend.create("Metadata Test")
+        entity = backlog_backend.create(properties={"title": "Metadata Test"})
 
         assert "file_path" in entity.metadata
         assert "created" in entity.metadata
 
     def test_update_adds_timestamp(self, backlog_backend: BacklogBackend) -> None:
         """Test that update adds updated timestamp."""
-        entity = backlog_backend.create("Timestamp Test")
+        entity = backlog_backend.create(properties={"title": "Timestamp Test"})
 
         # First create should have created timestamp
         assert "created" in entity.metadata
 
         # Update should add updated timestamp
-        updated = backlog_backend.update("task-1", status="in_progress")
+        updated = backlog_backend.update("task-1", properties={"status": "in_progress"})
         assert "updated" in updated.metadata
 
 
@@ -109,9 +113,9 @@ class TestDependencyWorkflow:
     def test_create_and_list_dependencies(self, backlog_backend: BacklogBackend) -> None:
         """Test creating tasks with dependencies and listing them."""
         # Create a dependency chain
-        task1 = backlog_backend.create("Foundation Task")
-        task2 = backlog_backend.create("Dependent Task")
-        task3 = backlog_backend.create("Top Level Task")
+        task1 = backlog_backend.create(properties={"title": "Foundation Task"})
+        task2 = backlog_backend.create(properties={"title": "Dependent Task"})
+        task3 = backlog_backend.create(properties={"title": "Top Level Task"})
 
         # Add dependencies: task3 depends on task2 and task1
         # task2 depends on task1
@@ -132,9 +136,9 @@ class TestDependencyWorkflow:
     def test_dependency_tree_workflow(self, backlog_backend: BacklogBackend) -> None:
         """Test getting dependency tree for complex relationships."""
         # Create tasks
-        task1 = backlog_backend.create("Database Setup")
-        task2 = backlog_backend.create("API Layer")
-        task3 = backlog_backend.create("User Interface")
+        task1 = backlog_backend.create(properties={"title": "Database Setup"})
+        task2 = backlog_backend.create(properties={"title": "API Layer"})
+        task3 = backlog_backend.create(properties={"title": "User Interface"})
 
         # Create dependencies
         backlog_backend.add_link(task2.id, [task1.id], "blocked_by")
@@ -150,9 +154,9 @@ class TestDependencyWorkflow:
 
     def test_remove_dependencies(self, backlog_backend: BacklogBackend) -> None:
         """Test removing dependencies from a task."""
-        task1 = backlog_backend.create("Task 1")
-        task2 = backlog_backend.create("Task 2")
-        task3 = backlog_backend.create("Task 3")
+        task1 = backlog_backend.create(properties={"title": "Task 1"})
+        task2 = backlog_backend.create(properties={"title": "Task 2"})
+        task3 = backlog_backend.create(properties={"title": "Task 3"})
 
         # Add multiple dependencies
         backlog_backend.add_link(task3.id, [task1.id, task2.id], "blocked_by")
@@ -171,9 +175,9 @@ class TestDependencyWorkflow:
 
     def test_circular_dependency_detection(self, backlog_backend: BacklogBackend) -> None:
         """Test detecting circular dependencies."""
-        task1 = backlog_backend.create("Task 1")
-        task2 = backlog_backend.create("Task 2")
-        task3 = backlog_backend.create("Task 3")
+        task1 = backlog_backend.create(properties={"title": "Task 1"})
+        task2 = backlog_backend.create(properties={"title": "Task 2"})
+        task3 = backlog_backend.create(properties={"title": "Task 3"})
 
         # Create a cycle: task1 -> task2 -> task3 -> task1
         backlog_backend.add_link(task1.id, [task2.id], "blocked_by")
@@ -197,14 +201,14 @@ class TestFilteringAndSorting:
     def test_filter_by_status_workflow(self, backlog_backend: BacklogBackend) -> None:
         """Test filtering tasks by different statuses."""
         # Create tasks with different statuses
-        task1 = backlog_backend.create("Todo Task")
-        task2 = backlog_backend.create("In Progress Task")
-        task3 = backlog_backend.create("Done Task")
+        task1 = backlog_backend.create(properties={"title": "Todo Task"})
+        task2 = backlog_backend.create(properties={"title": "In Progress Task"})
+        task3 = backlog_backend.create(properties={"title": "Done Task"})
 
-        backlog_backend.update(task2.id, status="in_progress")
-        backlog_backend.update(task3.id, status="closed")
+        backlog_backend.update(task2.id, properties={"status": "in_progress"})
+        backlog_backend.update(task3.id, properties={"status": "closed"})
 
-        # Filter by each status
+        # Filter by each status (using backlog status format)
         todo_tasks = backlog_backend.list_entities(filters={"status": "To Do"})
         assert len(todo_tasks) == 1
         assert todo_tasks[0].id == task1.id
@@ -221,7 +225,7 @@ class TestFilteringAndSorting:
         """Test limiting number of results."""
         # Create many tasks
         for i in range(10):
-            backlog_backend.create(f"Task {i}")
+            backlog_backend.create(properties={"title": f"Task {i}"})
 
         # List with limit
         entities = backlog_backend.list_entities(limit=5)
@@ -229,9 +233,9 @@ class TestFilteringAndSorting:
 
     def test_default_sort_order(self, backlog_backend: BacklogBackend) -> None:
         """Test that list returns tasks in default sort order (newest first)."""
-        backlog_backend.create("First Task")
-        backlog_backend.create("Second Task")
-        backlog_backend.create("Third Task")
+        backlog_backend.create(properties={"title": "First Task"})
+        backlog_backend.create(properties={"title": "Second Task"})
+        backlog_backend.create(properties={"title": "Third Task"})
 
         entities = backlog_backend.list_entities()
 
@@ -247,10 +251,12 @@ class TestFilePersistence:
     def test_task_file_format(self, backlog_backend: BacklogBackend) -> None:
         """Test that task files are created in correct format."""
         entity = backlog_backend.create(
-            title="Format Test",
-            description="Testing file format",
-            labels={"type": "test"},
-            assignee="@formatter",
+            properties={
+                "title": "Format Test",
+                "description": "Testing file format",
+                "type": "test",
+                "assignee": "@formatter",
+            }
         )
 
         file_path = backlog_backend._get_task_file_path(entity.id)
@@ -275,12 +281,12 @@ class TestFilePersistence:
 
     def test_file_rename_on_title_change(self, backlog_backend: BacklogBackend) -> None:
         """Test that file is renamed when title changes."""
-        entity = backlog_backend.create("Original Title")
+        entity = backlog_backend.create(properties={"title": "Original Title"})
 
         original_path = backlog_backend._get_task_file_path(entity.id)
 
         # Update title
-        backlog_backend.update(entity.id, title="New Title")
+        backlog_backend.update(entity.id, properties={"title": "New Title"})
 
         # Old file should be gone
         assert not original_path.exists()
@@ -294,7 +300,9 @@ class TestFilePersistence:
         """Test that created timestamp is preserved in file format."""
         # Create a task normally
         entity = backlog_backend.create(
-            title="Metadata Test",
+            properties={
+                "title": "Metadata Test",
+            }
         )
 
         # Verify created timestamp is in file
@@ -311,7 +319,7 @@ class TestErrorRecovery:
     def test_handle_corrupted_file_gracefully(self, backlog_backend: BacklogBackend) -> None:
         """Test that corrupted files don't crash list operations."""
         # Create valid task
-        backlog_backend.create("Valid Task")
+        backlog_backend.create(properties={"title": "Valid Task"})
 
         # Create corrupted file (use name that won't parse as task-NNN)
         corrupted = backlog_backend.tasks_dir / "corrupted-file.md"
@@ -320,7 +328,7 @@ class TestErrorRecovery:
         # List should skip corrupted file and not crash
         entities = backlog_backend.list_entities()
         assert len(entities) == 1
-        assert entities[0].title == "Valid Task"
+        assert entities[0].properties["title"] == "Valid Task"
 
     def test_read_nonexistent_raises_error(self, backlog_backend: BacklogBackend) -> None:
         """Test reading non-existent task raises clear error."""
@@ -330,7 +338,7 @@ class TestErrorRecovery:
     def test_update_nonexistent_raises_error(self, backlog_backend: BacklogBackend) -> None:
         """Test updating non-existent task raises clear error."""
         with pytest.raises(ValueError, match="Task file not found"):
-            backlog_backend.update("task-99999", title="New Title")
+            backlog_backend.update("task-99999", properties={"title": "New Title"})
 
 
 class TestMultiTaskOperations:
@@ -340,7 +348,7 @@ class TestMultiTaskOperations:
         """Test deleting multiple tasks at once."""
         # Create tasks
         for i in range(5):
-            backlog_backend.create(f"Task {i}")
+            backlog_backend.create(properties={"title": f"Task {i}"})
 
         # Delete multiple
         backlog_backend.delete(["task-1", "task-2", "task-3"])
@@ -363,10 +371,10 @@ class TestMultiTaskOperations:
         #     \    /
         #    task4
 
-        task1 = backlog_backend.create("Foundation")
-        task2 = backlog_backend.create("Branch 1")
-        task3 = backlog_backend.create("Branch 2")
-        task4 = backlog_backend.create("Convergence")
+        task1 = backlog_backend.create(properties={"title": "Foundation"})
+        task2 = backlog_backend.create(properties={"title": "Branch 1"})
+        task3 = backlog_backend.create(properties={"title": "Branch 2"})
+        task4 = backlog_backend.create(properties={"title": "Convergence"})
 
         # Create dependencies
         backlog_backend.add_link(task2.id, [task1.id], "blocked_by")
@@ -396,14 +404,14 @@ class TestIdFormats:
 
     def test_operations_with_numeric_ids(self, backlog_backend: BacklogBackend) -> None:
         """Test operations using numeric IDs without task- prefix."""
-        _ = backlog_backend.create("Numeric ID Test")
+        _ = backlog_backend.create(properties={"title": "Numeric ID Test"})
 
         # All operations should work with numeric ID
         read = backlog_backend.read("1")
         assert read.id == "task-1"
 
-        updated = backlog_backend.update("1", status="in_progress")
-        assert updated.status == "in_progress"
+        updated = backlog_backend.update("1", properties={"status": "in_progress"})
+        assert updated.properties["status"] == "in_progress"
 
         links = backlog_backend.list_links("1")
         assert len(links) == 0
@@ -414,8 +422,8 @@ class TestIdFormats:
 
     def test_mixed_id_format_operations(self, backlog_backend: BacklogBackend) -> None:
         """Test operations with mixed ID formats."""
-        _ = backlog_backend.create("Task 1")
-        _ = backlog_backend.create("Task 2")
+        _ = backlog_backend.create(properties={"title": "Task 1"})
+        _ = backlog_backend.create(properties={"title": "Task 2"})
 
         # Add link using different formats
         backlog_backend.add_link("task-1", ["2"], "blocked_by")

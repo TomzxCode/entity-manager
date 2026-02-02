@@ -199,7 +199,7 @@ class GitHubBackend(Backend):
         """Delete (close) GitHub issues."""
         logger.info("Deleting (closing) GitHub issues", entity_ids=entity_ids, count=len(entity_ids))
         for entity_id in entity_ids:
-            self.update(entity_id, status="closed")
+            self.update(entity_id, properties={"status": "closed"})
         logger.info("GitHub issues deleted successfully", count=len(entity_ids))
 
     def list_entities(

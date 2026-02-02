@@ -39,10 +39,10 @@ def test_create_issue(mock_run: MagicMock) -> None:
         stderr="",
     )
 
-    entity = backend.create("Test Issue", description="Test description")
+    entity = backend.create(properties={"title": "Test Issue", "description": "Test description"})
     assert entity.id == "bd-a1b2"
-    assert entity.title == "Test Issue"
-    assert entity.description == "Test description"
+    assert entity.properties["title"] == "Test Issue"
+    assert entity.properties["description"] == "Test description"
 
 
 @patch("entity_manager.backends.beads.subprocess.run")
@@ -70,9 +70,10 @@ def test_read_issue(mock_run: MagicMock) -> None:
 
     entity = backend.read("bd-a1b2")
     assert entity.id == "bd-a1b2"
-    assert entity.title == "Test Issue"
-    assert entity.assignee == "alice"
-    assert entity.labels == {"bug": "", "priority": "high"}
+    assert entity.properties["title"] == "Test Issue"
+    assert entity.properties["assignee"] == "alice"
+    assert entity.properties["bug"] == ""
+    assert entity.properties["priority"] == "high"
 
 
 @patch("entity_manager.backends.beads.subprocess.run")
@@ -164,10 +165,10 @@ def test_update_issue(mock_run: MagicMock) -> None:
         stderr="",
     )
 
-    entity = backend.update("bd-a1b2", title="Updated Title", status="closed", assignee="bob")
-    assert entity.title == "Updated Title"
-    assert entity.status == "closed"
-    assert entity.assignee == "bob"
+    entity = backend.update("bd-a1b2", properties={"title": "Updated Title", "status": "closed", "assignee": "bob"})
+    assert entity.properties["title"] == "Updated Title"
+    assert entity.properties["status"] == "closed"
+    assert entity.properties["assignee"] == "bob"
 
 
 @patch("entity_manager.backends.beads.subprocess.run")
@@ -194,8 +195,9 @@ def test_update_issue_with_labels(mock_run: MagicMock) -> None:
     )
 
     # Update with new labels
-    entity = backend.update("bd-a1b2", labels={"new": "label", "tag": ""})
-    assert entity.labels == {"old": "label"}  # Will have old labels from read mock
+    entity = backend.update("bd-a1b2", properties={"new": "label", "tag": ""})
+    # Will have old labels from the mocked read, merged with new
+    assert "old" in entity.properties
 
 
 @patch("entity_manager.backends.beads.subprocess.run")
@@ -241,7 +243,7 @@ def test_list_with_filters(mock_run: MagicMock) -> None:
 
     entities = backend.list_entities(filters={"status": "open", "assignee": "alice"})
     assert len(entities) == 1
-    assert entities[0].assignee == "alice"
+    assert entities[0].properties["assignee"] == "alice"
 
 
 @patch("entity_manager.backends.beads.subprocess.run")
@@ -432,8 +434,9 @@ def test_create_with_labels(mock_run: MagicMock) -> None:
         stderr="",
     )
 
-    entity = backend.create("Test", labels={"bug": "", "priority": "high"})
-    assert entity.labels == {"bug": "", "priority": "high"}
+    entity = backend.create(properties={"title": "Test", "bug": "", "priority": "high"})
+    assert entity.properties["bug"] == ""
+    assert entity.properties["priority"] == "high"
 
 
 @patch("entity_manager.backends.beads.subprocess.run")

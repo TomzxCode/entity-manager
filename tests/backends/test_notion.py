@@ -50,13 +50,13 @@ def test_create_entity(notion_backend: NotionBackend, mock_notion_client: Mock, 
     mock_notion_client.pages.create.return_value = sample_notion_page
 
     entity = notion_backend.create(
-        title="Test Task", description="Test description", labels={"priority": "high"}, assignee="user-123"
+        properties={"title": "Test Task", "description": "Test description", "priority": "high", "assignee": "user-123"}
     )
 
     assert entity.id == "test-page-id-123"
-    assert entity.title == "Test Task"
-    assert entity.description == "Test description"
-    assert entity.status == "open"
+    assert entity.properties["title"] == "Test Task"
+    assert entity.properties["description"] == "Test description"
+    assert entity.properties["status"] == "open"
 
     # Verify the API was called with correct parameters
     mock_notion_client.pages.create.assert_called_once()
@@ -72,9 +72,9 @@ def test_read_entity(notion_backend: NotionBackend, mock_notion_client: Mock, sa
     entity = notion_backend.read("test-page-id-123")
 
     assert entity.id == "test-page-id-123"
-    assert entity.title == "Test Task"
-    assert entity.description == "Test description"
-    assert entity.status == "open"
+    assert entity.properties["title"] == "Test Task"
+    assert entity.properties["description"] == "Test description"
+    assert entity.properties["status"] == "open"
 
     mock_notion_client.pages.retrieve.assert_called_once_with(page_id="test-page-id-123")
 
@@ -86,9 +86,9 @@ def test_update_entity(notion_backend: NotionBackend, mock_notion_client: Mock, 
     updated_page["properties"]["Name"]["title"] = [{"plain_text": "Updated Task"}]
     mock_notion_client.pages.retrieve.return_value = updated_page
 
-    entity = notion_backend.update("test-page-id-123", title="Updated Task")
+    entity = notion_backend.update("test-page-id-123", properties={"title": "Updated Task"})
 
-    assert entity.title == "Updated Task"
+    assert entity.properties["title"] == "Updated Task"
 
     # Verify update was called
     mock_notion_client.pages.update.assert_called_once()
@@ -117,7 +117,7 @@ def test_list_entities(notion_backend: NotionBackend, mock_notion_client: Mock, 
 
     assert len(entities) == 1
     assert entities[0].id == "test-page-id-123"
-    assert entities[0].title == "Test Task"
+    assert entities[0].properties["title"] == "Test Task"
 
     mock_notion_client.databases.query.assert_called_once()
 

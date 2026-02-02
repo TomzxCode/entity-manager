@@ -73,6 +73,7 @@ def test_create_entity(redis_backend, mock_redis):
         if key.startswith("entity:r-"):
             return {
                 "id": key.replace("entity:", ""),
+                "type": "default",
                 "title": "Test Task",
                 "description": "Test description",
                 "labels": "{}",
@@ -84,13 +85,16 @@ def test_create_entity(redis_backend, mock_redis):
 
     mock_redis.hgetall.side_effect = hgetall_side_effect
 
-    entity = redis_backend.create("Test Task", description="Test description", assignee="user1")
+    entity = redis_backend.create(
+        type="default",
+        properties={"title": "Test Task", "description": "Test description", "assignee": "user1"},
+    )
 
     assert isinstance(entity, Entity)
     assert entity.id.startswith("r-")
-    assert entity.title == "Test Task"
-    assert entity.description == "Test description"
-    assert entity.assignee == "user1"
+    assert entity.properties["title"] == "Test Task"
+    assert entity.properties["description"] == "Test description"
+    assert entity.properties["assignee"] == "user1"
     mock_redis.hset.assert_called_once()
     mock_redis.sadd.assert_called_once()
 
@@ -103,6 +107,7 @@ def test_read_entity(redis_backend, mock_redis):
     """Test reading an entity."""
     mock_redis.hgetall.return_value = {
         "id": "r-abc123",
+        "type": "default",
         "title": "Existing Task",
         "description": "",
         "labels": "",
@@ -114,8 +119,8 @@ def test_read_entity(redis_backend, mock_redis):
     entity = redis_backend.read("r-abc123")
 
     assert entity.id == "r-abc123"
-    assert entity.title == "Existing Task"
-    assert entity.status == "open"
+    assert entity.properties["title"] == "Existing Task"
+    assert entity.properties["status"] == "open"
 
 
 def test_read_entity_not_found(redis_backend, mock_redis):
@@ -130,6 +135,7 @@ def test_read_entity_invalid_labels(redis_backend, mock_redis):
     """Test reading an entity with invalid labels JSON."""
     mock_redis.hgetall.return_value = {
         "id": "r-badlabel",
+        "type": "default",
         "title": "Task",
         "description": "",
         "labels": "invalid-json",
@@ -139,13 +145,15 @@ def test_read_entity_invalid_labels(redis_backend, mock_redis):
     }
 
     entity = redis_backend.read("r-badlabel")
-    assert entity.labels == {}
+    # Labels should not be in properties since they couldn't be parsed
+    assert entity.properties.get("labels") is None or entity.properties.get("labels") == {}
 
 
 def test_update_entity(redis_backend, mock_redis):
     """Test updating an entity."""
     mock_redis.hgetall.return_value = {
         "id": "r-update1",
+        "type": "default",
         "title": "Updated Title",
         "description": "",
         "labels": "",
@@ -154,10 +162,10 @@ def test_update_entity(redis_backend, mock_redis):
         "metadata": "{}",
     }
 
-    entity = redis_backend.update("r-update1", title="Updated Title", status="in_progress")
+    entity = redis_backend.update("r-update1", properties={"title": "Updated Title", "status": "in_progress"})
 
-    assert entity.title == "Updated Title"
-    assert entity.status == "in_progress"
+    assert entity.properties["title"] == "Updated Title"
+    assert entity.properties["status"] == "in_progress"
     mock_redis.hset.assert_called()
 
 
@@ -166,7 +174,7 @@ def test_update_entity_not_found(redis_backend, mock_redis):
     mock_redis.exists.return_value = False
 
     with pytest.raises(ValueError, match="Entity r-missing not found"):
-        redis_backend.update("r-missing", title="New Title")
+        redis_backend.update("r-missing", properties={"title": "New Title"})
 
 
 def test_delete_entities(redis_backend, mock_redis, mock_pipeline):
@@ -198,6 +206,7 @@ def test_list_entities_with_filters(redis_backend, mock_redis):
     mock_redis.hgetall.side_effect = [
         {
             "id": "r-2",
+            "type": "default",
             "title": "Task 2",
             "description": "",
             "labels": "",
@@ -207,6 +216,7 @@ def test_list_entities_with_filters(redis_backend, mock_redis):
         },
         {
             "id": "r-1",
+            "type": "default",
             "title": "Task 1",
             "description": "",
             "labels": '{"priority": "high"}',
@@ -218,7 +228,7 @@ def test_list_entities_with_filters(redis_backend, mock_redis):
 
     entities = redis_backend.list_entities(filters={"status": "open"})
     assert len(entities) == 1
-    assert entities[0].status == "open"
+    assert entities[0].properties["status"] == "open"
 
 
 def test_list_entities_with_sort(redis_backend, mock_redis):
@@ -227,6 +237,7 @@ def test_list_entities_with_sort(redis_backend, mock_redis):
     mock_redis.hgetall.side_effect = [
         {
             "id": "r-1",
+            "type": "default",
             "title": "Zebra Task",
             "description": "",
             "labels": "",
@@ -236,6 +247,7 @@ def test_list_entities_with_sort(redis_backend, mock_redis):
         },
         {
             "id": "r-2",
+            "type": "default",
             "title": "Apple Task",
             "description": "",
             "labels": "",
@@ -247,8 +259,8 @@ def test_list_entities_with_sort(redis_backend, mock_redis):
 
     entities = redis_backend.list_entities(sort_by="title")
     assert len(entities) == 2
-    assert entities[0].title == "Apple Task"
-    assert entities[1].title == "Zebra Task"
+    assert entities[0].properties["title"] == "Apple Task"
+    assert entities[1].properties["title"] == "Zebra Task"
 
 
 def test_list_entities_with_limit(redis_backend, mock_redis):
@@ -257,6 +269,7 @@ def test_list_entities_with_limit(redis_backend, mock_redis):
     mock_redis.hgetall.side_effect = [
         {
             "id": f"r-{i}",
+            "type": "default",
             "title": f"Task {i}",
             "description": "",
             "labels": "",
@@ -276,6 +289,7 @@ def test_add_link(redis_backend, mock_redis, mock_pipeline):
     # Setup for source entity and target entity
     mock_redis.hgetall.return_value = {
         "id": "r-source",
+        "type": "default",
         "title": "Source",
         "description": "",
         "labels": "",
@@ -338,6 +352,7 @@ def test_get_link_tree(redis_backend, mock_redis):
     """Test getting link tree for an entity."""
     mock_redis.hgetall.return_value = {
         "id": "r-1",
+        "type": "default",
         "title": "Main Task",
         "description": "",
         "labels": "",

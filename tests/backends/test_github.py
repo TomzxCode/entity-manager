@@ -271,11 +271,11 @@ def test_create_issue(github_backend: GitHubBackend, mock_repository: Mock) -> N
     mock_repository.create_issue.return_value = mock_issue
     mock_repository.get_labels.return_value = []
 
-    entity = github_backend.create("Test Issue", description="Test description")
+    entity = github_backend.create(properties={"title": "Test Issue", "description": "Test description"})
 
     assert entity.id == "1"
-    assert entity.title == "Test Issue"
-    assert entity.description == "Test description"
+    assert entity.properties["title"] == "Test Issue"
+    assert entity.properties["description"] == "Test description"
     mock_repository.create_issue.assert_called_once()
 
 
@@ -300,7 +300,7 @@ def test_create_issue_with_labels(github_backend: GitHubBackend, mock_repository
     mock_repository.create_issue.return_value = mock_issue
     mock_repository.get_labels.return_value = []
 
-    github_backend.create("Test Issue", labels={"bug": "", "priority": "high"})
+    github_backend.create(properties={"title": "Test Issue", "bug": "", "priority": "high"})
 
     # Verify labels were ensured to exist
     assert mock_repository.create_label.call_count >= 1
@@ -331,9 +331,9 @@ def test_read_issue(github_backend: GitHubBackend, mock_repository: Mock) -> Non
     entity = github_backend.read("1")
 
     assert entity.id == "1"
-    assert entity.title == "Test Issue"
-    assert entity.assignee == "test_user"
-    assert entity.labels == {"bug": ""}
+    assert entity.properties["title"] == "Test Issue"
+    assert entity.properties["assignee"] == "test_user"
+    assert entity.properties["bug"] == ""
     mock_repository.get_issue.assert_called_once_with(number=1)
 
 
@@ -355,9 +355,9 @@ def test_update_issue_title(github_backend: GitHubBackend, mock_repository: Mock
 
     mock_repository.get_issue.return_value = mock_issue
 
-    entity = github_backend.update("1", title="Updated Title")
+    entity = github_backend.update("1", properties={"title": "Updated Title"})
 
-    assert entity.title == "Updated Title"
+    assert entity.properties["title"] == "Updated Title"
     mock_issue.edit.assert_called_once()
 
 
@@ -379,9 +379,9 @@ def test_update_issue_status(github_backend: GitHubBackend, mock_repository: Moc
 
     mock_repository.get_issue.return_value = mock_issue
 
-    entity = github_backend.update("1", status="closed")
+    entity = github_backend.update("1", properties={"status": "closed"})
 
-    assert entity.status == "closed"
+    assert entity.properties["status"] == "closed"
     assert mock_issue.edit.call_count >= 1
 
 
@@ -406,7 +406,7 @@ def test_update_issue_labels(github_backend: GitHubBackend, mock_repository: Moc
     mock_repository.get_issue.return_value = mock_issue
     mock_repository.get_labels.return_value = []
 
-    github_backend.update("1", labels={"bug": ""})
+    github_backend.update("1", properties={"bug": ""})
 
     mock_issue.set_labels.assert_called_once()
 
@@ -432,7 +432,7 @@ def test_update_issue_assignee(github_backend: GitHubBackend, mock_repository: M
 
     mock_repository.get_issue.return_value = mock_issue
 
-    github_backend.update("1", assignee="new_user")
+    github_backend.update("1", properties={"assignee": "new_user"})
 
     mock_issue.add_to_assignees.assert_called_once_with("new_user")
 
@@ -519,7 +519,7 @@ def test_list_entities_with_status_filter(github_backend: GitHubBackend, mock_re
     entities = github_backend.list_entities(filters={"status": "open"})
 
     assert len(entities) == 1
-    assert entities[0].status == "open"
+    assert entities[0].properties["status"] == "open"
 
 
 def test_list_entities_with_limit(github_backend: GitHubBackend, mock_repository: Mock) -> None:

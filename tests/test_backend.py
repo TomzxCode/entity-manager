@@ -1,5 +1,7 @@
 """Tests for backend interface."""
 
+from typing import Any
+
 from entity_manager.backend import Backend
 from entity_manager.models import Entity, Link
 
@@ -9,58 +11,46 @@ class MockBackend(Backend):
 
     def __init__(self) -> None:
         """Initialize mock backend."""
-        self.entities: dict[int, Entity] = {}
+        self.entities: dict[str, Entity] = {}
         self.links: list[Link] = []
         self.config: dict[str, str] = {}
         self._next_id = 1
 
     def create(
         self,
-        title: str,
-        description: str = "",
-        labels: dict[str, str] | None = None,
-        assignee: str | None = None,
+        type: str = "default",
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Create a new entity."""
+        entity_id = str(self._next_id)
         entity = Entity(
-            id=self._next_id,
-            title=title,
-            description=description,
-            labels=labels or {},
-            assignee=assignee,
+            id=entity_id,
+            type=type,
+            properties=properties or {},
         )
-        self.entities[self._next_id] = entity
+        self.entities[entity_id] = entity
         self._next_id += 1
         return entity
 
-    def read(self, entity_id: int) -> Entity:
+    def read(self, entity_id: str) -> Entity:
         """Read an entity by ID."""
         return self.entities[entity_id]
 
     def update(
         self,
-        entity_id: int,
-        title: str | None = None,
-        description: str | None = None,
-        labels: dict[str, str] | None = None,
-        status: str | None = None,
-        assignee: str | None = None,
+        entity_id: str,
+        type: str | None = None,
+        properties: dict[str, Any] | None = None,
     ) -> Entity:
         """Update an entity."""
         entity = self.entities[entity_id]
-        if title:
-            entity.title = title
-        if description is not None:
-            entity.description = description
-        if labels:
-            entity.labels = labels
-        if status:
-            entity.status = status
-        if assignee:
-            entity.assignee = assignee
+        if type is not None:
+            entity.type = type
+        if properties is not None:
+            entity.properties.update(properties)
         return entity
 
-    def delete(self, entity_ids: list[int]) -> None:
+    def delete(self, entity_ids: list[str]) -> None:
         """Delete entities."""
         for eid in entity_ids:
             del self.entities[eid]
@@ -74,17 +64,17 @@ class MockBackend(Backend):
         """List entities."""
         entities = list(self.entities.values())
         if filters and "status" in filters:
-            entities = [e for e in entities if e.status == filters["status"]]
+            entities = [e for e in entities if e.properties.get("status") == filters["status"]]
         if limit:
             entities = entities[:limit]
         return entities
 
-    def add_link(self, source_id: int, target_ids: list[int], link_type: str) -> None:
+    def add_link(self, source_id: str, target_ids: list[str], link_type: str) -> None:
         """Add links."""
         for target_id in target_ids:
             self.links.append(Link(source_id, target_id, link_type))
 
-    def remove_link(self, source_id: int, target_ids: list[int], link_type: str, recursive: bool = False) -> None:
+    def remove_link(self, source_id: str, target_ids: list[str], link_type: str, recursive: bool = False) -> None:
         """Remove links."""
         self.links = [
             link
@@ -92,21 +82,21 @@ class MockBackend(Backend):
             if not (link.source_id == source_id and link.target_id in target_ids and link.link_type == link_type)
         ]
 
-    def list_links(self, entity_id: int, link_type: str | None = None) -> list[Link]:
+    def list_links(self, entity_id: str, link_type: str | None = None) -> list[Link]:
         """List links."""
         links = [link for link in self.links if link.source_id == entity_id]
         if link_type:
             links = [link for link in links if link.link_type == link_type]
         return links
 
-    def get_link_tree(self, entity_id: int) -> dict:
+    def get_link_tree(self, entity_id: str) -> dict:
         """Get link tree."""
         entity = self.entities.get(entity_id)
         return {
             "entity": {
-                "id": str(entity_id),
-                "title": entity.title if entity else "",
-                "state": entity.status if entity else "open",
+                "id": entity_id,
+                "title": entity.properties.get("title", "") if entity else "",
+                "state": entity.properties.get("status", "open") if entity else "open",
             },
             "links": {
                 "children": [],
@@ -116,7 +106,7 @@ class MockBackend(Backend):
             },
         }
 
-    def find_cycles(self) -> list[list[int]]:
+    def find_cycles(self) -> list[list[str]]:
         """Find cycles."""
         return []
 
@@ -140,33 +130,33 @@ class MockBackend(Backend):
 def test_create_entity() -> None:
     """Test creating an entity."""
     backend = MockBackend()
-    entity = backend.create("Test Task", description="Test description")
-    assert entity.id == 1
-    assert entity.title == "Test Task"
-    assert entity.description == "Test description"
+    entity = backend.create(properties={"title": "Test Task", "description": "Test description"})
+    assert entity.id == "1"
+    assert entity.properties["title"] == "Test Task"
+    assert entity.properties["description"] == "Test description"
 
 
 def test_read_entity() -> None:
     """Test reading an entity."""
     backend = MockBackend()
-    entity = backend.create("Test Task")
+    entity = backend.create(properties={"title": "Test Task"})
     read_entity = backend.read(entity.id)
     assert read_entity.id == entity.id
-    assert read_entity.title == entity.title
+    assert read_entity.properties["title"] == entity.properties["title"]
 
 
 def test_update_entity() -> None:
     """Test updating an entity."""
     backend = MockBackend()
-    entity = backend.create("Old Title")
-    updated = backend.update(entity.id, title="New Title")
-    assert updated.title == "New Title"
+    entity = backend.create(properties={"title": "Old Title"})
+    updated = backend.update(entity.id, properties={"title": "New Title"})
+    assert updated.properties["title"] == "New Title"
 
 
 def test_delete_entity() -> None:
     """Test deleting an entity."""
     backend = MockBackend()
-    entity = backend.create("Test Task")
+    entity = backend.create(properties={"title": "Test Task"})
     backend.delete([entity.id])
     assert entity.id not in backend.entities
 
@@ -174,9 +164,9 @@ def test_delete_entity() -> None:
 def test_list_entities() -> None:
     """Test listing entities."""
     backend = MockBackend()
-    backend.create("Task 1")
-    backend.create("Task 2")
-    backend.create("Task 3")
+    backend.create(properties={"title": "Task 1"})
+    backend.create(properties={"title": "Task 2"})
+    backend.create(properties={"title": "Task 3"})
     entities = backend.list_entities()
     assert len(entities) == 3
 
@@ -184,8 +174,8 @@ def test_list_entities() -> None:
 def test_add_link() -> None:
     """Test adding links."""
     backend = MockBackend()
-    e1 = backend.create("Task 1")
-    e2 = backend.create("Task 2")
+    e1 = backend.create(properties={"title": "Task 1"})
+    e2 = backend.create(properties={"title": "Task 2"})
     backend.add_link(e1.id, [e2.id], "blocks")
     links = backend.list_links(e1.id)
     assert len(links) == 1
