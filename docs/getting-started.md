@@ -8,27 +8,93 @@
 uv tool install git+https://github.com/TomzxCode/entity-manager
 ```
 
-## Configuration
+## Initial Setup
 
-Entity Manager requires configuration for various integrations. Create a `.env` file in your project directory:
+Entity Manager uses a hierarchical configuration system with both local (project-specific) and global (user-wide) settings.
+
+### Quick Setup with Interactive Init
+
+The easiest way to get started is using the interactive `init` command:
 
 ```bash
-# GitHub integration (optional)
-GITHUB_TOKEN=your_github_token_here
+# Setup global configuration (recommended for tokens)
+em init --global
 
-# Notion integration (optional)
-NOTION_TOKEN=your_notion_token_here
-NOTION_DATABASE_ID=your_database_id_here
+# Or setup local configuration for this project
+em init
 ```
+
+This will guide you through:
+1. Selecting a backend (backlog, beads, github, markdown, notion, redis, sqlite)
+2. Configuring backend-specific settings
+3. Setting authentication tokens (if needed)
+
+### Manual Configuration
+
+Alternatively, configure manually using config commands:
+
+#### Backlog.md Backend
+
+```bash
+em config set backend backlog
+em config set backlog.path ./backlog
+```
+
+#### GitHub Backend
+
+```bash
+# Set backend and repository (local, project-specific)
+em config set backend github
+em config set github.owner your-username
+em config set github.repository your-repo
+
+# Set token (global, reused across projects)
+em config set github.token ghp_your_token_here --global
+```
+
+Create a GitHub personal access token with `repo` scope at [https://github.com/settings/tokens](https://github.com/settings/tokens)
+
+#### Markdown Backend (File-based)
+
+```bash
+em config set backend markdown
+em config set markdown.directory_path ./entities
+```
+
+#### Redis Backend (In-Memory)
+
+```bash
+em config set backend redis
+# Optional: configure connection (defaults shown)
+em config set redis.host localhost
+em config set redis.port 6379
+```
+
+#### SQLite Backend (Local Storage)
+
+```bash
+em config set backend sqlite
+em config set sqlite.db_path .em.db
+```
+
+See [README.md](../README.md) for complete backend setup instructions.
 
 ## Basic Usage
 
-Once installed, you can use the CLI:
+Once configured, you can use the CLI:
 
 ```bash
-# Show help/available commands
-entity-manager --help
-```
+# Show help
+em --help
+
+# Create an entity
+em create "Fix login bug" --labels "type:bug,priority:high"
+
+# List entities
+em list
+
+# Read entity details
+em read 123
 
 ## Next Steps
 

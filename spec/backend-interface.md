@@ -90,9 +90,10 @@ The backend interface abstracts away the differences between various data source
 - The `get_link_tree()` method MUST accept an `entity_id` parameter.
 - The `get_link_tree()` method MUST return a dictionary with two keys: `entity` and `links`.
 - The `entity` key MUST contain a dictionary with entity information: `id`, `title`, and `state`.
-- The `links` key MUST contain a dictionary of link categories.
-- The `links` dictionary SHOULD include standard categories: `children`, `blocking`, `blocked_by`, and `parent`.
-- Each link category MUST contain a list of dictionaries, each with `id`, `title`, and `state`.
+- The `links` key MUST contain a dictionary of link categories, dynamically populated based on actual link types.
+- The `links` dictionary SHOULD include standard categories: `children`, `blocking`, `blocked by`, and `parent`.
+- Each link category MUST contain a list of dictionaries, each with `id`, `title`, and optionally `state`.
+- The `get_link_tree()` method MUST include both outgoing and incoming links with appropriate inverse relationship names.
 
 #### Find Cycles
 
@@ -125,6 +126,52 @@ The backend interface abstracts away the differences between various data source
 - The Notion backend MUST map Notion database properties to entity attributes.
 - The Notion backend MUST require a database with specific properties: Name, Description, Status, Labels, Assignee, Blocked By, Blocking, Parent, and Children.
 - The Notion backend MUST use Notion's relation properties for links.
+
+#### Backlog Backend
+
+- The Backlog backend MUST use backlog.md task format (e.g., `task-10`) for entity IDs.
+- The Backlog backend MUST read and write markdown files directly in the `backlog/tasks/` folder.
+- The Backlog backend MUST normalize numeric IDs to task format (e.g., `10` → `task-10`).
+- The Backlog backend MUST map status values: `open` → "To Do", `in_progress` → "In Progress", `closed` → "Done".
+- The Backlog backend MUST use `blocked_by` link type for dependencies.
+
+#### SQLite Backend
+
+- The SQLite backend MUST use integer IDs for entity identifiers.
+- The SQLite backend MUST store entities in a relational database schema.
+- The SQLite backend MUST support all standard link types.
+- The SQLite backend MUST handle concurrent access using database locking mechanisms.
+- The SQLite backend SHOULD support filtering and sorting efficiently using SQL queries.
+
+#### Markdown Backend
+
+- The Markdown backend MUST store entities as individual markdown files in a configured directory.
+- The Markdown backend MUST use filename-based IDs (e.g., `entity-123.md` → `entity-123`).
+- The Markdown backend MUST support arbitrary link types with automatic inverse relationship mapping.
+- The Markdown backend MUST handle link inversions: `blocking` ↔ `blocked by`, `parent` ↔ `children`, `depends-on` ↔ `depended-on-by`.
+- The Markdown backend MAY generate generic inverse names for custom link types (e.g., links ending in `-on` get `-on-by` suffix).
+- The Markdown backend MUST store links in a separate YAML file (`.em/links.yaml`).
+- The Markdown backend MUST support dynamic link types in the link tree structure.
+
+#### Notion Backend
+
+- The Notion backend MUST use page IDs (UUIDs) as entity IDs.
+- The Notion backend MUST map Notion database properties to entity attributes.
+- The Notion backend MUST require a database with specific properties: Name, Description, Status, Labels, Assignee, Blocked By, Blocking, Parent, and Children.
+- The Notion backend MUST use Notion's relation properties for links.
+- The Notion backend MUST authenticate using integration tokens.
+- The Notion backend SHOULD handle Notion API rate limits appropriately.
+
+#### Redis Backend
+
+- The Redis backend MUST use UUIDs as entity IDs.
+- The Redis backend MUST store entities as JSON-serialized strings in Redis keys.
+- The Redis backend MUST use Redis Sets to track entity relationships (links).
+- The Redis backend MUST support configurable Redis connection parameters (host, port, db, password).
+- The Redis backend SHOULD use connection pooling for performance.
+- The Redis backend MUST handle Redis connection errors gracefully.
+- The Redis backend MAY support Redis Cluster for distributed deployments.
+- Data persistence MUST be configured at the Redis server level (RDB snapshots or AOF).
 
 ### Error Handling
 

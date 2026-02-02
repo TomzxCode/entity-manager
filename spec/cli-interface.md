@@ -28,7 +28,7 @@ The CLI enables:
 The CLI MUST support the following command groups:
 - **Entity commands**: `create`, `read`, `update`, `delete`, `list`
 - **Link commands**: `link add`, `link remove`, `link list`, `link tree`, `link cycle`
-- **Config commands**: `config set`, `config get`, `config unset`, `config list`
+- **Config commands**: `config set`, `config get`, `config unset`, `config list`, `init`
 
 ### Global Options
 
@@ -288,10 +288,43 @@ The CLI MUST support the following command groups:
   ```
   Output:
   ```
-  backend=github
-  github.owner=myusername
-  github.repository=myrepo
-  github.token=ghp_...
+  Configuration settings:
+
+  backend = github
+  github.owner = myusername
+  github.repository = myrepo
+  github.token = ghp_...xxxx
+  ```
+
+#### Init Command
+
+- Syntax: `em init [options]`
+- Optional arguments:
+  - `--global`: Initialize global configuration instead of local
+- Behavior:
+  - MUST provide interactive prompts for backend selection
+  - MUST show list of available backends (backlog, beads, github, markdown, notion, sqlite)
+  - MUST validate backend selection
+  - MUST prompt for backend-specific configuration fields
+  - MUST show existing values as defaults when updating configuration
+  - MUST use password-style input for sensitive fields (tokens)
+  - MUST save configuration to local or global config based on flag
+- Output: MUST print confirmation of backend initialization
+- Example:
+  ```bash
+  em init --global
+  ```
+  Interactive prompts:
+  ```
+  Entity Manager Configuration
+  Select the backend to use
+  Available backends: backlog, beads, github, markdown, notion, sqlite
+  Backend [github]: github
+  GitHub owner []: myusername
+  GitHub repository []: myrepo
+  GitHub token: ••••••••
+
+  Initialized github backend (global)
   ```
 
 ### Output Format

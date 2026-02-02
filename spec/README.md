@@ -5,7 +5,7 @@ This directory contains detailed specifications for the major features of the En
 ## Specification Documents
 
 ### [Backend Interface](./backend-interface.md)
-Defines the abstract contract that all entity manager backends must implement. Covers CRUD operations, link management, graph traversal, and backend-specific requirements for GitHub, Beads, and Notion.
+Defines the abstract contract that all entity manager backends must implement. Covers CRUD operations, link management, graph traversal, and backend-specific requirements for Backlog, Beads, GitHub, Markdown, Notion, Redis, and SQLite backends.
 
 ### [Entity Management](./entity-management.md)
 Describes the core data model for entities, including fields (id, title, description, status, labels, assignee), entity lifecycle operations, filtering and querying, and integration with external systems.

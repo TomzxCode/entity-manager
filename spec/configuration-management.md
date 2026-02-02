@@ -89,6 +89,8 @@ Configuration management enables:
 - By default, the `list()` operation MUST return merged configuration (global + local, with local taking precedence).
 - With the `--global` flag, the `list()` operation MUST return only global configuration.
 - The `list()` operation MUST return results as a dictionary.
+- The `list()` operation MUST redact sensitive values (tokens, passwords, secrets, api_keys, auth) when displaying.
+- Redacted values MUST show first 4 and last 4 characters if longer than 8 characters, or "-redacted-" if 8 characters or less.
 
 ### Configuration Keys
 
@@ -106,17 +108,47 @@ Configuration management enables:
 - Both `github.owner` and `github.repository` MUST be set for GitHub backend to function.
 - The `github.token` key SHOULD be set globally (in user config) for security and convenience.
 
+#### Backlog Backend Configuration
+
+- The `backlog.path` key MAY specify the path to the backlog directory.
+- The `backlog.path` key MAY default to `./backlog` if not set.
+- The `backlog.path` key MUST point to a directory containing a `backlog/tasks/` subdirectory.
+
 #### Beads Backend Configuration
 
 - The `beads.project_path` key MAY specify the path to the beads project.
 - The `beads.project_path` key MAY default to the current directory if not set.
 - The `beads.project_path` key MUST be an absolute or relative path string.
 
+#### Markdown Backend Configuration
+
+- The `markdown.directory_path` key MAY specify the directory path for markdown files.
+- The `markdown.directory_path` key MAY default to the current directory (`.`) if not set.
+- The `markdown.directory_path` key MUST be a valid directory path.
+
 #### Notion Backend Configuration
 
 - The `notion.token` key MUST specify the Notion integration token.
 - The `notion.database_id` key MUST specify the Notion database ID to use.
 - The `notion.token` key SHOULD be set globally (in user config) for security.
+
+#### Redis Backend Configuration
+
+- The `redis.host` key MAY specify the Redis server hostname.
+- The `redis.host` key MAY default to `localhost` if not set.
+- The `redis.port` key MAY specify the Redis server port.
+- The `redis.port` key MAY default to `6379` if not set.
+- The `redis.db` key MAY specify the Redis database number.
+- The `redis.db` key MAY default to `0` if not set.
+- The `redis.password` key MAY specify the Redis authentication password.
+- The `redis.password` key SHOULD be set globally (in user config) for security.
+- All Redis configuration keys are optional with sensible defaults.
+
+#### SQLite Backend Configuration
+
+- The `sqlite.db_path` key MUST specify the path to the SQLite database file.
+- The `sqlite.db_path` key MAY default to `.em.db` if not set.
+- The `sqlite.db_path` key MUST be a valid file path.
 
 ### Configuration File Format
 
@@ -189,6 +221,16 @@ github:
 - The system MUST provide a `config get` command to read configuration values.
 - The system MUST provide a `config unset` command to remove configuration values.
 - The system MUST provide a `config list` command to show all configuration.
+- The system MUST provide an `init` command for interactive configuration setup.
+
+#### Init Command
+
+- The `init` command MUST provide interactive prompts for backend selection and configuration.
+- The `init` command MUST validate backend selection against available backends.
+- The `init` command MUST prompt for backend-specific configuration based on the selected backend.
+- The `init` command MUST show existing values as defaults when updating configuration.
+- The `init` command MUST support password-style input for sensitive fields (tokens).
+- The `init` command MUST support both local and global configuration via the `--global` flag.
 
 #### Global Flag
 
