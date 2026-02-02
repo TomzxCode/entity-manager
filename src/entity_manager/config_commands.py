@@ -6,6 +6,30 @@ from entity_manager.config import get_config
 
 config_app = App(name="config", help="Manage configuration")
 
+SENSITIVE_KEY_PATTERNS = ("token", "password", "secret", "api_key", "auth")
+
+
+def _redact_value(key: str, value: str) -> str:
+    """Redact a sensitive configuration value.
+
+    Shows first 4 and last 4 characters, or "-redacted-" if 8 chars or less.
+
+    Args:
+        key: Configuration key
+        value: Configuration value to potentially redact
+
+    Returns:
+        Original value or redacted version
+    """
+    key_lower = key.lower()
+    if not any(pattern in key_lower for pattern in SENSITIVE_KEY_PATTERNS):
+        return value
+    if not value:
+        return value
+    if len(value) <= 8:
+        return "-redacted-"
+    return f"{value[:4]}...{value[-4:]}"
+
 
 @config_app.command
 def set(key: str, value: str, global_: bool = False) -> None:
@@ -49,7 +73,8 @@ def get(key: str, global_: bool = False) -> None:
     if value is None:
         print(f"{key} is not set")
     else:
-        print(f"{key} = {value}")
+        redacted_value = _redact_value(key, value)
+        print(f"{key} = {redacted_value}")
 
 
 @config_app.command(name="list")
@@ -70,4 +95,5 @@ def list_config(global_: bool = False) -> None:
     scope = "Global" if global_ else "Configuration"
     print(f"{scope} settings:\n")
     for key, value in settings.items():
-        print(f"{key} = {value}")
+        redacted_value = _redact_value(key, value)
+        print(f"{key} = {redacted_value}")
