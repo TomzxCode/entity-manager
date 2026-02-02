@@ -114,9 +114,9 @@ def init(global_: bool = False) -> None:
 
     console.print("\n[bold]Entity Manager Configuration[/bold]")
     console.print("Select the backend to use", style="dim")
-    console.print("Available backends: backlog, beads, github, markdown, notion, sqlite", style="dim")
+    console.print("Available backends: backlog, beads, github, markdown, notion, redis, sqlite", style="dim")
 
-    valid_backends = ["backlog", "beads", "github", "markdown", "notion", "sqlite"]
+    valid_backends = ["backlog", "beads", "github", "markdown", "notion", "redis", "sqlite"]
     backend = None
     existing_backend = cfg.get("backend")
 
@@ -131,7 +131,19 @@ def init(global_: bool = False) -> None:
 
     config.set("backend", backend)
 
-    if backend == "github":
+    if backend == "backlog":
+        existing_path = cfg.get("backlog.path")
+        path = Prompt.ask("Backlog.md path", default=existing_path or "")
+        if path:
+            config.set("backlog.path", path)
+
+    elif backend == "beads":
+        existing_path = cfg.get("beads.project_path")
+        project_path = Prompt.ask("Beads project path", default=existing_path or "")
+        if project_path:
+            config.set("beads.project_path", project_path)
+
+    elif backend == "github":
         existing_owner = cfg.get("github.owner")
         owner = Prompt.ask("GitHub owner", default=existing_owner or "")
         if owner:
@@ -146,11 +158,10 @@ def init(global_: bool = False) -> None:
         if token:
             config.set("github.token", token)
 
-    elif backend == "beads":
-        existing_path = cfg.get("beads.project_path")
-        project_path = Prompt.ask("Beads project path", default=existing_path or "")
-        if project_path:
-            config.set("beads.project_path", project_path)
+    elif backend == "markdown":
+        existing_path = cfg.get("markdown.directory_path")
+        directory_path = Prompt.ask("Markdown directory path", default=existing_path or ".")
+        config.set("markdown.directory_path", directory_path)
 
     elif backend == "notion":
         token = Prompt.ask("Notion token", password=True, default="")
@@ -162,22 +173,28 @@ def init(global_: bool = False) -> None:
         if database_id:
             config.set("notion.database_id", database_id)
 
-    elif backend == "backlog":
-        existing_path = cfg.get("backlog.path")
-        path = Prompt.ask("Backlog.md path", default=existing_path or "")
-        if path:
-            config.set("backlog.path", path)
+    elif backend == "redis":
+        existing_host = cfg.get("redis.host")
+        host = Prompt.ask("Redis host", default=existing_host or "localhost")
+        config.set("redis.host", host)
+
+        existing_port = cfg.get("redis.port")
+        port = Prompt.ask("Redis port", default=existing_port or "6379")
+        config.set("redis.port", port)
+
+        existing_db = cfg.get("redis.db")
+        db = Prompt.ask("Redis database number", default=existing_db or "0")
+        config.set("redis.db", db)
+
+        password = Prompt.ask("Redis password (leave empty if none)", password=True, default="")
+        if password:
+            config.set("redis.password", password)
 
     elif backend == "sqlite":
         existing_path = cfg.get("sqlite.db_path")
         db_path = Prompt.ask("SQLite database path", default=existing_path or ".em.db")
         if db_path:
             config.set("sqlite.db_path", db_path)
-
-    elif backend == "markdown":
-        existing_path = cfg.get("markdown.directory_path")
-        directory_path = Prompt.ask("Markdown directory path", default=existing_path or ".")
-        config.set("markdown.directory_path", directory_path)
 
     else:
         console.print(f"Unknown backend: {backend}", style="red")

@@ -10,6 +10,8 @@ from entity_manager.backends.backlog import BacklogBackend
 from entity_manager.backends.beads import BeadsBackend
 from entity_manager.backends.github import GitHubBackend
 from entity_manager.backends.markdown import MarkdownBackend
+from entity_manager.backends.notion import NotionBackend
+from entity_manager.backends.redis import RedisBackend
 from entity_manager.backends.sqlite import SQLiteBackend
 from entity_manager.config import get_config
 from entity_manager.config_commands import config_app, init
@@ -55,12 +57,26 @@ def get_backend() -> Backend:
                 "  em config set github.repository <repo>"
             )
         return GitHubBackend(owner=owner, repo=repo, token=token)
-    elif backend_type == "beads":
-        project_path = config.get("beads.project_path")
-        return BeadsBackend(project_path=project_path)
     elif backend_type == "markdown":
         directory_path = config.get("markdown.directory_path", ".")
         return MarkdownBackend(directory_path=directory_path)
+    elif backend_type == "notion":
+        token = config.get("notion.token")
+        database_id = config.get("notion.database_id")
+
+        if not token or not database_id:
+            raise ValueError(
+                "Notion token and database ID not configured. Set them using:\n"
+                "  em config set notion.token <token> --global\n"
+                "  em config set notion.database_id <database_id>"
+            )
+        return NotionBackend(token=token, database_id=database_id)
+    elif backend_type == "redis":
+        host = config.get("redis.host", "localhost")
+        port = int(config.get("redis.port", "6379"))
+        db = int(config.get("redis.db", "0"))
+        password = config.get("redis.password")
+        return RedisBackend(host=host, port=port, db=db, password=password)
     elif backend_type == "sqlite":
         db_path = config.get("sqlite.db_path")
         return SQLiteBackend(db_path=db_path)
