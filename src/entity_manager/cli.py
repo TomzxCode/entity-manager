@@ -153,7 +153,7 @@ def update(
 def delete(*entity_ids: str) -> None:
     """Delete one or more entities."""
     backend = get_backend()
-    backend.delete(list(entity_ids))
+    backend.delete((*entity_ids,))
     print(f"Deleted {len(entity_ids)} entity(ies)")
 
 
