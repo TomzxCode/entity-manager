@@ -166,22 +166,6 @@ def create(
             )
             sys.exit(1)
 
-            if prop_def.name in properties_dict:
-                # Coerce value to correct type
-                value = properties_dict[prop_def.name]
-                try:
-                    coerced = coerce_property_value(value, prop_def.type)
-                    properties_dict[prop_def.name] = coerced
-                except Exception as e:
-                    print(f"Error: Invalid value for property '{prop_def.name}': {e}", file=sys.stderr)
-                    sys.exit(1)
-
-                # Validate
-                valid, error = entity_type.validate_property(prop_def.name, coerced)
-                if not valid:
-                    print(f"Error: {error}", file=sys.stderr)
-                    sys.exit(1)
-
         entity = backend.create(type=entity_type_name, properties=properties_dict)
         title = properties_dict.get("title", "")
         print(f"Created entity {entity.id}: {title}")
