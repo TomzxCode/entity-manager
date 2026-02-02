@@ -47,6 +47,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Usage: usage.md
+  - Backends: backends.md
   - Architecture: architecture.md
   - Specifications:
       - Overview: spec/README.md

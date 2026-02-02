@@ -46,83 +46,6 @@ Configuration can be stored in two locations:
 
 By default, commands use local config with global fallback. Use the `--global` flag to explicitly target global config.
 
-### GitHub Backend
-
-1. Set the backend type to GitHub (global):
-```bash
-em config set backend github --global
-```
-
-2. Configure GitHub repository (can be local or global):
-```bash
-# Local (repository-specific)
-em config set github.owner your-username
-em config set github.repository your-repo
-
-# Or global (user-wide default)
-em config set github.owner your-username --global
-em config set github.repository your-repo --global
-```
-
-3. Set your GitHub token:
-```bash
-em config set github.token your-github-personal-access-token --global
-```
-
-Create a GitHub personal access token with `repo` scope at https://github.com/settings/tokens
-
-### Beads Backend
-
-1. Set the backend type to Beads:
-```bash
-em config set backend beads --global
-```
-
-2. Configure project path (optional, defaults to current directory):
-```bash
-em config set beads.project_path /path/to/project
-```
-
-3. Install beads from https://github.com/steveyegge/beads and initialize in your project:
-```bash
-cd /path/to/project
-bd init
-```
-
-**Note:** With beads backend, entity IDs use the beads hash format (e.g., `bd-a1b2` instead of numeric IDs)
-
-### Notion Backend
-
-1. Set the backend type to Notion:
-```bash
-em config set backend notion --global
-```
-
-2. Configure Notion integration:
-```bash
-# Set your Notion integration token
-em config set notion.token your-notion-integration-token --global
-
-# Set the database ID to use for entities
-em config set notion.database_id your-database-id
-```
-
-3. Create a Notion integration and get your token at https://www.notion.so/my-integrations
-
-4. Database Schema Requirements:
-Your Notion database should have the following properties:
-- `Name` (Title) - Entity title
-- `Description` (Rich Text) - Entity description
-- `Status` (Status) - Entity status (open, in progress, closed, etc.)
-- `Labels` (Multi-select) - Entity labels/tags
-- `Assignee` (People) - Entity assignee
-- `Blocked By` (Relation) - Links to blocking entities
-- `Blocking` (Relation) - Links to blocked entities
-- `Parent` (Relation) - Parent entity link
-- `Children` (Relation) - Child entity links
-
-**Note:** Notion backend uses page IDs (UUIDs with hyphens) as entity IDs.
-
 ### Backlog.md Backend
 
 1. Set the backend type to Backlog.md:
@@ -157,6 +80,120 @@ backlog init "My Project"
 ```bash
 em link add task-10 task-5 --type blocked_by
 ```
+
+### Beads Backend
+
+1. Set the backend type to Beads:
+```bash
+em config set backend beads --global
+```
+
+2. Configure project path (optional, defaults to current directory):
+```bash
+em config set beads.project_path /path/to/project
+```
+
+3. Install beads from https://github.com/steveyegge/beads and initialize in your project:
+```bash
+cd /path/to/project
+bd init
+```
+
+**Note:** With beads backend, entity IDs use the beads hash format (e.g., `bd-a1b2` instead of numeric IDs)
+
+### GitHub Backend
+
+1. Set the backend type to GitHub (global):
+```bash
+em config set backend github --global
+```
+
+2. Configure GitHub repository (can be local or global):
+```bash
+# Local (repository-specific)
+em config set github.owner your-username
+em config set github.repository your-repo
+
+# Or global (user-wide default)
+em config set github.owner your-username --global
+em config set github.repository your-repo --global
+```
+
+3. Set your GitHub token:
+```bash
+em config set github.token your-github-personal-access-token --global
+```
+
+Create a GitHub personal access token with `repo` scope at https://github.com/settings/tokens
+
+### Notion Backend
+
+1. Set the backend type to Notion:
+```bash
+em config set backend notion --global
+```
+
+2. Configure Notion integration:
+```bash
+# Set your Notion integration token
+em config set notion.token your-notion-integration-token --global
+
+# Set the database ID to use for entities
+em config set notion.database_id your-database-id
+```
+
+3. Create a Notion integration and get your token at https://www.notion.so/my-integrations
+
+4. Database Schema Requirements:
+Your Notion database should have the following properties:
+- `Name` (Title) - Entity title
+- `Description` (Rich Text) - Entity description
+- `Status` (Status) - Entity status (open, in progress, closed, etc.)
+- `Labels` (Multi-select) - Entity labels/tags
+- `Assignee` (People) - Entity assignee
+- `Blocked By` (Relation) - Links to blocking entities
+- `Blocking` (Relation) - Links to blocked entities
+- `Parent` (Relation) - Parent entity link
+- `Children` (Relation) - Child entity links
+
+**Note:** Notion backend uses page IDs (UUIDs with hyphens) as entity IDs.
+
+### Redis Backend
+
+1. Set the backend type to Redis:
+```bash
+em config set backend redis --global
+```
+
+2. Configure Redis connection (optional, defaults shown):
+```bash
+# Redis server host
+em config set redis.host localhost
+
+# Redis server port
+em config set redis.port 6379
+
+# Redis database number
+em config set redis.db 0
+
+# Redis password (if authentication is required)
+em config set redis.password your-redis-password --global
+```
+
+3. Ensure Redis server is running:
+```bash
+# Start Redis (command varies by OS and installation method)
+redis-server
+
+# Or with Docker
+docker run -d -p 6379:6379 redis:latest
+```
+
+**Note:** Redis backend uses UUIDs as entity IDs. Data is stored in-memory by default and will be lost on Redis restart unless persistence is configured in Redis.
+
+**Performance:** Redis provides sub-millisecond read/write operations, making it ideal for high-performance scenarios, caching, or distributed systems.
+
+**Persistence:** Configure Redis persistence (RDB snapshots or AOF) in `redis.conf` if you need data to survive restarts.
 
 ## Concepts
 
