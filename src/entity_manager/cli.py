@@ -259,7 +259,7 @@ def delete(*entity_ids: str) -> None:
     print(f"Deleted {len(entity_ids)} entity(ies)")
 
 
-@app.command
+@app.command(name="list")
 def list_entities(
     filter: str | None = None,
     sort: str | None = None,
@@ -274,6 +274,9 @@ def list_entities(
         for f in filter.split(","):
             if "=" in f:
                 key, value = f.split("=", 1)
+                filters[key.strip()] = value.strip()
+            elif ":" in f:
+                key, value = f.split(":", 1)
                 filters[key.strip()] = value.strip()
 
     entities = backend.list_entities(filters=filters, sort_by=sort, limit=limit)

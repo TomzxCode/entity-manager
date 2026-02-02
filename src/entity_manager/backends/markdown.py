@@ -373,10 +373,11 @@ class MarkdownBackend(Backend):
 
         # Apply filters
         if filters:
-            if "status" in filters:
-                entities = [e for e in entities if e.properties.get("status") == filters["status"]]
-            if "assignee" in filters:
-                entities = [e for e in entities if e.properties.get("assignee") == filters["assignee"]]
+            for key, value in filters.items():
+                if key == "type":
+                    entities = [e for e in entities if e.type == value]
+                else:
+                    entities = [e for e in entities if e.properties.get(key) == value]
 
         # Apply sorting
         if sort_by:

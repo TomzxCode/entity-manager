@@ -457,14 +457,22 @@ class BacklogBackend(Backend):
             filtered = []
             for entity in entities:
                 match = True
-                if "status" in filters:
-                    # Map filter status to entity status
-                    filter_status = self._map_status_to_entity(filters["status"])
-                    if entity.properties.get("status") != filter_status:
-                        match = False
-                if "assignee" in filters:
-                    if entity.properties.get("assignee") != filters["assignee"]:
-                        match = False
+                for key, value in filters.items():
+                    if key == "type":
+                        if entity.type != value:
+                            match = False
+                            break
+                    elif key == "status":
+                        # Map filter status to entity status
+                        filter_status = self._map_status_to_entity(value)
+                        if entity.properties.get("status") != filter_status:
+                            match = False
+                            break
+                    else:
+                        # Filter by property
+                        if entity.properties.get(key) != value:
+                            match = False
+                            break
                 if match:
                     filtered.append(entity)
             entities = filtered

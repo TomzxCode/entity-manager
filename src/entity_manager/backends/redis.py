@@ -248,7 +248,11 @@ class RedisBackend(Backend):
             for entity in entities:
                 match = True
                 for key, value in filters.items():
-                    if key == "status":
+                    if key == "type":
+                        if entity.type != value:
+                            match = False
+                            break
+                    elif key == "status":
                         if entity.properties.get("status") != value:
                             match = False
                             break
