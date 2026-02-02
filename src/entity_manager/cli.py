@@ -9,6 +9,7 @@ from entity_manager.backend import Backend
 from entity_manager.backends.backlog import BacklogBackend
 from entity_manager.backends.beads import BeadsBackend
 from entity_manager.backends.github import GitHubBackend
+from entity_manager.backends.markdown import MarkdownBackend
 from entity_manager.backends.sqlite import SQLiteBackend
 from entity_manager.config import get_config
 from entity_manager.config_commands import config_app
@@ -53,6 +54,12 @@ def get_backend() -> Backend:
                 "  em config set github.repository <repo>"
             )
         return GitHubBackend(owner=owner, repo=repo, token=token)
+    elif backend_type == "beads":
+        project_path = config.get("beads.project_path")
+        return BeadsBackend(project_path=project_path)
+    elif backend_type == "markdown":
+        directory_path = config.get("markdown.directory_path", ".")
+        return MarkdownBackend(directory_path=directory_path)
     elif backend_type == "sqlite":
         db_path = config.get("sqlite.db_path")
         return SQLiteBackend(db_path=db_path)
