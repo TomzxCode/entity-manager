@@ -465,7 +465,15 @@ class MarkdownBackend(Backend):
             "blocking": "blocked by",
             "parent": "children",
             "children": "parent",
+            "depends-on": "depended-on-by",
         }
+        # If no explicit inverse mapping exists, create a generic inverse name
+        if link_type not in inverse_map:
+            # Convert "some-link" to "some-link-by" or similar
+            if link_type.endswith("-on"):
+                return link_type[:-3] + "-on-by"
+            else:
+                return f"{link_type}-inverse"
         return inverse_map.get(link_type, link_type)
 
     def get_link_tree(self, entity_id: str) -> dict[str, Any]:
@@ -480,10 +488,8 @@ class MarkdownBackend(Backend):
                     "state": str
                 },
                 "links": {
-                    "children": list[dict],
-                    "blocking": list[dict],
-                    "blocked_by": list[dict],
-                    "parent": list[dict]
+                    "<link_type>": list[dict],  # Dynamically populated
+                    ...
                 }
             }
         """
@@ -495,19 +501,14 @@ class MarkdownBackend(Backend):
         # Load all links
         links = self._load_links()
 
-        # Initialize tree structure
+        # Initialize tree structure with dynamic links
         tree: dict[str, Any] = {
             "entity": {
                 "id": entity.id,
                 "title": entity.title,
                 "state": entity.status,
             },
-            "links": {
-                "children": [],
-                "blocking": [],
-                "blocked_by": [],
-                "parent": [],
-            },
+            "links": defaultdict(list),
         }
 
         # Helper to get entity info
@@ -518,44 +519,31 @@ class MarkdownBackend(Backend):
             except ValueError:
                 return None
 
-        # Get outgoing links (children, blocking)
+        # Get outgoing links (all types)
         if entity_id in links:
             for link_type, target_ids in links[entity_id].items():
                 for target_id in target_ids:
                     info = get_entity_info(target_id)
                     if info:
-                        if link_type == "children":
-                            tree["links"]["children"].append(info)
-                        elif link_type == "blocking":
-                            tree["links"]["blocking"].append(info)
+                        tree["links"][link_type].append(info)
 
-        # Get incoming links (blocked_by, parent)
+        # Get incoming links (all types, with inverse relationship)
         for source_id, link_types in links.items():
             for link_type, target_ids in link_types.items():
                 if entity_id in target_ids:
                     info = get_entity_info(source_id)
                     if info:
-                        # If someone links to us with "blocked by", they block us
-                        if link_type == "blocked by":
-                            tree["links"]["blocked_by"].append(info)
-                        # If we link to someone with "blocking", they block us (inverse)
-                        elif link_type == "blocking":
-                            tree["links"]["blocked_by"].append(info)
-                        # If someone links to us with "parent", they are our parent
-                        elif link_type == "parent":
-                            tree["links"]["parent"].append(info)
-                        # If we link to someone with "children", they are our parent (inverse)
-                        elif link_type == "children":
-                            tree["links"]["parent"].append(info)
+                        # Add as inverse relationship
+                        inverse_type = self._get_inverse_link_type(link_type)
+                        tree["links"][inverse_type].append(info)
 
-        logger.info(
-            "Link tree retrieved",
-            entity_id=entity_id,
-            children_count=len(tree["links"]["children"]),
-            blocking_count=len(tree["links"]["blocking"]),
-            blocked_by_count=len(tree["links"]["blocked_by"]),
-            parent_count=len(tree["links"]["parent"]),
-        )
+        # Convert defaultdict to regular dict for cleaner output
+        tree["links"] = dict(tree["links"])
+
+        # Log link counts
+        link_counts = {k: len(v) for k, v in tree["links"].items()}
+        logger.info("Link tree retrieved", entity_id=entity_id, link_counts=link_counts)
+
         return tree
 
     def find_cycles(self) -> list[list[str]]:

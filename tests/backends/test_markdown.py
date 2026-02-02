@@ -83,9 +83,7 @@ def test_update_entity(markdown_backend: MarkdownBackend) -> None:
 
 def test_update_partial_entity(markdown_backend: MarkdownBackend) -> None:
     """Test updating only some fields of an entity."""
-    entity = markdown_backend.create(
-        title="Title", description="Description", labels={"key": "value"}, assignee="user"
-    )
+    entity = markdown_backend.create(title="Title", description="Description", labels={"key": "value"}, assignee="user")
 
     updated = markdown_backend.update(entity.id, title="New Title")
 
@@ -303,8 +301,8 @@ def test_get_link_tree(markdown_backend: MarkdownBackend) -> None:
     assert tree["entity"]["title"] == "Parent"
     assert len(tree["links"]["children"]) == 1
     assert tree["links"]["children"][0]["id"] == entity2.id
-    assert len(tree["links"]["blocked_by"]) == 1
-    assert tree["links"]["blocked_by"][0]["id"] == entity3.id
+    assert len(tree["links"]["blocked by"]) == 1
+    assert tree["links"]["blocked by"][0]["id"] == entity3.id
 
 
 def test_find_cycles_no_cycles(markdown_backend: MarkdownBackend) -> None:

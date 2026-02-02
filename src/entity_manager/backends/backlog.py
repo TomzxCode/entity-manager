@@ -206,7 +206,7 @@ class BacklogBackend(Backend):
             Filename in format "task-<id> - <title>.md"
         """
         # Sanitize title for filename
-        safe_title = re.sub(r'[<>:"/\\|?*]', '', title)
+        safe_title = re.sub(r'[<>:"/\\|?*]', "", title)
         safe_title = safe_title.strip()
 
         # Limit length
@@ -466,9 +466,7 @@ class BacklogBackend(Backend):
                 link_type=link_type,
                 supported_types=["blocked_by"],
             )
-            raise ValueError(
-                f"Unsupported link type: '{link_type}'. Backlog backend supports: 'blocked_by'"
-            )
+            raise ValueError(f"Unsupported link type: '{link_type}'. Backlog backend supports: 'blocked_by'")
 
         # Read source task
         file_path = self._get_task_file_path(source_normalized)
@@ -513,9 +511,7 @@ class BacklogBackend(Backend):
         )
 
         if link_type != "blocked_by":
-            raise ValueError(
-                f"Unsupported link type: '{link_type}'. Backlog backend supports: 'blocked_by'"
-            )
+            raise ValueError(f"Unsupported link type: '{link_type}'. Backlog backend supports: 'blocked_by'")
 
         # Read source task
         file_path = self._get_task_file_path(source_normalized)
@@ -600,11 +596,13 @@ class BacklogBackend(Backend):
         for link in self.list_links(normalized_id):
             try:
                 target_entity = self.read(link.target_id)
-                blocked_by.append({
-                    "id": target_entity.id,
-                    "title": target_entity.title,
-                    "state": target_entity.status,
-                })
+                blocked_by.append(
+                    {
+                        "id": target_entity.id,
+                        "title": target_entity.title,
+                        "state": target_entity.status,
+                    }
+                )
             except ValueError:
                 # Target doesn't exist, skip
                 pass

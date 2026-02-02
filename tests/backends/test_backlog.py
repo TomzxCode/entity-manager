@@ -149,7 +149,7 @@ class TestCreate:
 
     def test_create_sanitizes_filename(self, backlog_backend: BacklogBackend) -> None:
         """Test that create sanitizes special characters in title."""
-        _ = backlog_backend.create('Task: With / Special \\ <Characters>')
+        _ = backlog_backend.create("Task: With / Special \\ <Characters>")
 
         # File should be created with sanitized name
         files = list(backlog_backend.tasks_dir.glob("task-1*.md"))
@@ -514,7 +514,7 @@ labels: [unclosed bracket
 
     def test_generate_filename_sanitizes(self, backlog_backend: BacklogBackend) -> None:
         """Test filename generation sanitizes special chars."""
-        filename = backlog_backend._generate_filename("task-1", 'Bad:Chars/Here\\<>|?*')
+        filename = backlog_backend._generate_filename("task-1", "Bad:Chars/Here\\<>|?*")
         assert ":" not in filename
         assert "/" not in filename
         assert filename == "task-1 - BadCharsHere.md"

@@ -1,9 +1,8 @@
 """Configuration commands for entity manager CLI."""
 
+from cyclopts import App
 from rich.console import Console
 from rich.prompt import Prompt
-
-from cyclopts import App, Parameter
 
 from entity_manager.config import get_config
 
