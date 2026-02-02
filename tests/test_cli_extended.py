@@ -151,7 +151,7 @@ def test_get_backend_markdown_default_path(temp_config_dir):
         with patch("entity_manager.cli.MarkdownBackend") as mock_markdown:
             backend = get_backend()
             assert backend is not None
-            mock_markdown.assert_called_once_with(directory_path=".")
+            mock_markdown.assert_called_once_with(directory_path=".entity-manager/content")
 
 
 def test_get_backend_sqlite(temp_config_dir):

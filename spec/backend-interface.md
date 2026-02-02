@@ -150,7 +150,7 @@ The backend interface abstracts away the differences between various data source
 - The Markdown backend MUST support arbitrary link types with automatic inverse relationship mapping.
 - The Markdown backend MUST handle link inversions: `blocking` ↔ `blocked by`, `parent` ↔ `children`, `depends-on` ↔ `depended-on-by`.
 - The Markdown backend MAY generate generic inverse names for custom link types (e.g., links ending in `-on` get `-on-by` suffix).
-- The Markdown backend MUST store links in a separate YAML file (`.em/links.yaml`).
+- The Markdown backend MUST store links in a separate YAML file (`_links.yaml` in the content directory).
 - The Markdown backend MUST support dynamic link types in the link tree structure.
 
 #### Notion Backend

@@ -112,7 +112,7 @@ Uses [PyGithub](https://github.com/PyGithub/PyGithub) to map GitHub Issues to en
 
 Stores entities as individual markdown files:
 - File-based entity IDs
-- Links stored in separate YAML file (.em/links.yaml)
+- Links stored in separate YAML file (_links.yaml in the content directory)
 - Supports arbitrary link types with automatic inverse mapping
 
 #### Notion Backend

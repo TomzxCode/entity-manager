@@ -37,7 +37,7 @@ def get_backend() -> Backend:
     """Get the configured backend."""
 
     config = get_config()
-    backend_type = config.get("backend", "github")
+    backend_type = config.get("backend", "markdown")
 
     if backend_type == "backlog":
         backlog_path = config.get("backlog.path")
@@ -58,7 +58,7 @@ def get_backend() -> Backend:
             )
         return GitHubBackend(owner=owner, repo=repo, token=token)
     elif backend_type == "markdown":
-        directory_path = config.get("markdown.directory_path", ".")
+        directory_path = config.get("markdown.directory_path", ".entity-manager/content")
         return MarkdownBackend(directory_path=directory_path)
     elif backend_type == "notion":
         token = config.get("notion.token")

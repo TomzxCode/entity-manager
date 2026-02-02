@@ -203,18 +203,18 @@ The Markdown backend stores entities as individual markdown files with a separat
 
 - File-based entity storage
 - Markdown format for easy editing
-- YAML link storage (`.em/links.yaml`)
+- YAML link storage (`_links.yaml` in the content directory)
 - Arbitrary link types with automatic inverse mapping
 - Git-friendly format
 
 ### Setup
 
 ```bash
-# Set backend type
+# Set backend type (optional, markdown is the default)
 em config set backend markdown
 
-# Configure directory path (optional, defaults to current directory)
-em config set markdown.directory_path ./entities
+# Configure directory path (optional, defaults to .entity-manager/content)
+em config set markdown.directory_path .entity-manager/content
 ```
 
 ### ID Format
@@ -225,12 +225,12 @@ Entity IDs are based on filenames (e.g., `entity-123.md` → `entity-123`).
 
 ```
 project/
-├── entities/
-│   ├── entity-1.md
-│   ├── entity-2.md
-│   └── entity-3.md
-└── .em/
-    └── links.yaml
+└── .entity-manager/
+    └── content/
+        ├── _links.yaml
+        ├── entity-1.md
+        ├── entity-2.md
+        └── entity-3.md
 ```
 
 ### Link Inverse Mapping

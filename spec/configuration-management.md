@@ -98,7 +98,7 @@ Configuration management enables:
 
 - The `backend` key MUST specify which backend to use (e.g., "github", "beads", "notion").
 - The `backend` key MUST be a required configuration for the system to function.
-- The `backend` key defaults to "github" if not set.
+- The `backend` key defaults to "markdown" if not set.
 
 #### GitHub Backend Configuration
 
@@ -123,7 +123,7 @@ Configuration management enables:
 #### Markdown Backend Configuration
 
 - The `markdown.directory_path` key MAY specify the directory path for markdown files.
-- The `markdown.directory_path` key MAY default to the current directory (`.`) if not set.
+- The `markdown.directory_path` key MAY default to `.entity-manager/content` if not set.
 - The `markdown.directory_path` key MUST be a valid directory path.
 
 #### Notion Backend Configuration
