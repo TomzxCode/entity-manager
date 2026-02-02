@@ -6,6 +6,7 @@ import structlog
 from cyclopts import App, Parameter
 
 from entity_manager.backend import Backend
+from entity_manager.backends.backlog import BacklogBackend
 from entity_manager.backends.beads import BeadsBackend
 from entity_manager.backends.github import GitHubBackend
 from entity_manager.config import get_config
@@ -48,6 +49,9 @@ def get_backend() -> Backend:
     elif backend_type == "beads":
         project_path = config.get("beads.project_path")
         return BeadsBackend(project_path=project_path)
+    elif backend_type == "backlog":
+        backlog_path = config.get("backlog.path")
+        return BacklogBackend(backlog_path=backlog_path)
     else:
         raise ValueError(f"Unknown backend: {backend_type}")
 

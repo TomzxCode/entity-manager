@@ -123,6 +123,41 @@ Your Notion database should have the following properties:
 
 **Note:** Notion backend uses page IDs (UUIDs with hyphens) as entity IDs.
 
+### Backlog.md Backend
+
+1. Set the backend type to Backlog.md:
+```bash
+em config set backend backlog --global
+```
+
+2. Configure backlog path (optional, defaults to `./backlog`):
+```bash
+em config set backlog.path /path/to/project/backlog
+```
+
+3. Initialize Backlog.md in your project (if not already done):
+```bash
+cd /path/to/project
+# Install backlog.md CLI if needed
+npm i -g backlog.md
+# Initialize the project
+backlog init "My Project"
+```
+
+**Note:** The Backlog.md backend reads and writes markdown files directly in the `backlog/tasks/` folder. The backlog CLI is not required for entity-manager operations - it only uses the markdown file format.
+
+**Entity IDs:** Use Backlog.md format (e.g., `task-10`, `task-42`) when referencing entities. You can also use numeric IDs (e.g., `10`, `42`) and they will be automatically normalized.
+
+**Status Mapping:**
+- `open` → "To Do"
+- `in_progress` → "In Progress"
+- `closed` → "Done"
+
+**Dependencies:** Use `em link add` with `blocked_by` type to create dependencies between tasks:
+```bash
+em link add task-10 task-5 --type blocked_by
+```
+
 ## Concepts
 
 - **Entity**: A core object that holds data and metadata.
