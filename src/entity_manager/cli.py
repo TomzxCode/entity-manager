@@ -9,6 +9,7 @@ from entity_manager.backend import Backend
 from entity_manager.backends.backlog import BacklogBackend
 from entity_manager.backends.beads import BeadsBackend
 from entity_manager.backends.github import GitHubBackend
+from entity_manager.backends.sqlite import SQLiteBackend
 from entity_manager.config import get_config
 from entity_manager.config_commands import config_app
 from entity_manager.link_commands import link_app
@@ -34,7 +35,13 @@ def get_backend() -> Backend:
     config = get_config()
     backend_type = config.get("backend", "github")
 
-    if backend_type == "github":
+    if backend_type == "backlog":
+        backlog_path = config.get("backlog.path")
+        return BacklogBackend(backlog_path=backlog_path)
+    elif backend_type == "beads":
+        project_path = config.get("beads.project_path")
+        return BeadsBackend(project_path=project_path)
+    elif backend_type == "github":
         owner = config.get("github.owner")
         repo = config.get("github.repository")
         token = config.get("github.token")
@@ -46,12 +53,9 @@ def get_backend() -> Backend:
                 "  em config set github.repository <repo>"
             )
         return GitHubBackend(owner=owner, repo=repo, token=token)
-    elif backend_type == "beads":
-        project_path = config.get("beads.project_path")
-        return BeadsBackend(project_path=project_path)
-    elif backend_type == "backlog":
-        backlog_path = config.get("backlog.path")
-        return BacklogBackend(backlog_path=backlog_path)
+    elif backend_type == "sqlite":
+        db_path = config.get("sqlite.db_path")
+        return SQLiteBackend(db_path=db_path)
     else:
         raise ValueError(f"Unknown backend: {backend_type}")
 
